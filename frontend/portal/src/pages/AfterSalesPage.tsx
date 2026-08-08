@@ -234,7 +234,7 @@ export default function AfterSalesPage() {
               rowSelection={{
                 type: 'checkbox',
                 selectedRowKeys: selectedItems.map((item) => item.orderItemId),
-                onChange: (keys: number[], rows: OrderItemRecord[]) =>
+                onChange: (_keys, rows) =>
                   setSelectedItems(
                     rows.map((row) => ({
                       orderItemId: row.id,
