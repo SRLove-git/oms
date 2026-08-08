@@ -43,6 +43,10 @@ function onUserAction(key: MenuKey) {
         <a-menu-item key="/qualifications">资质管理</a-menu-item>
         <a-menu-item key="/users">用户管理</a-menu-item>
         <a-menu-item key="/audit-logs">审计日志</a-menu-item>
+        <a-menu-item key="/after-sales">售后服务</a-menu-item>
+        <a-menu-item key="/reconciliation">支付对账</a-menu-item>
+        <a-menu-item key="/logistics">物流轨迹</a-menu-item>
+        <a-menu-item key="/notifications">消息通知</a-menu-item>
       </a-menu>
     </a-layout-sider>
 

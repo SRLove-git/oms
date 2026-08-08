@@ -6,6 +6,7 @@ import HomePage from '@/pages/HomePage'
 import LoginPage from '@/pages/LoginPage'
 import OrdersPage from '@/pages/OrdersPage'
 import ProductsPage from '@/pages/ProductsPage'
+import AfterSalesPage from '@/pages/AfterSalesPage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const token = localStorage.getItem('oms-token')
@@ -46,6 +47,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireAuth>
             <OrdersPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: 'after-sales',
+        element: (
+          <RequireAuth>
+            <AfterSalesPage />
           </RequireAuth>
         ),
       },

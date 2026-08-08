@@ -260,6 +260,18 @@ public class OrderService {
     }
 
     @Transactional
+    public void markAfterSales(String orderNo, String returnNo, Integer type, Long operatorId, String operatorName) {
+        Order order = findOrder(orderNo);
+        transit(order, OrderStatus.AFTER_SALES, operatorId, operatorName, "售后介入：" + returnNo);
+    }
+
+    @Transactional
+    public void completeAfterSales(String orderNo, Long operatorId, String operatorName) {
+        Order order = findOrder(orderNo);
+        transit(order, OrderStatus.COMPLETED, operatorId, operatorName, "售后处理完成");
+    }
+
+    @Transactional
     public void handlePaymentSuccess(PaymentSuccessRequest request) {
         Order order = findOrder(request.orderNo());
         if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {

@@ -61,14 +61,17 @@ mvn -B verify
 ```bash
 # 1. 启动基础设施
 ./scripts/dev-up.sh
-# 2. 启动网关与 4 个核心服务（各开一个终端）
-mvn -pl oms-gateway,user-service,order-service,inventory-service,payment-center -am spring-boot:run
-# 3. 执行冒烟（下单 → 支付 → 审核 → 发货 → 签收 → 完成）
+# 2. 启动网关与 6 个业务服务（各开一个终端）
+mvn -pl oms-gateway,user-service,order-service,inventory-service,after-sales-service,payment-center,integration-service -am spring-boot:run
+# 3. 执行阶段一冒烟（下单 → 支付 → 审核 → 发货 → 签收 → 完成）
 ./scripts/e2e-smoke.sh
+# 4. 执行阶段二冒烟（售后三类型 → 物流 → 集成 → 通知 → 对账）
+./scripts/e2e-smoke-phase2.sh
 ```
 
 > 支付默认 `mock` 渠道（`oms.payment.mock-only=true`），微信/支付宝适配器已预留，商户号与证书就绪后接入。
 > 订单超时默认 30 分钟，可用 `OMS_ORDER_TIMEOUT_MINUTES` 调整。
+> 售后/物流/第三方平台/通知均提供 mock 适配，真实渠道资质就绪后替换适配器即可。
 
 ## 配置说明
 

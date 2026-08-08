@@ -12,15 +12,17 @@ public final class OrderStatus {
     public static final int SIGNED = 5;
     public static final int COMPLETED = 6;
     public static final int CANCELLED = 7;
+    public static final int AFTER_SALES = 8;
 
     private static final Map<Integer, Set<Integer>> ALLOWED_TRANSITIONS = Map.of(
             PENDING_PAYMENT, Set.of(PAID, CANCELLED),
             PAID, Set.of(AUDITED, CANCELLED),
             AUDITED, Set.of(SHIPPED),
-            SHIPPED, Set.of(SIGNED),
-            SIGNED, Set.of(COMPLETED),
+            SHIPPED, Set.of(SIGNED, AFTER_SALES),
+            SIGNED, Set.of(COMPLETED, AFTER_SALES),
             COMPLETED, Set.of(),
-            CANCELLED, Set.of());
+            CANCELLED, Set.of(),
+            AFTER_SALES, Set.of(COMPLETED, CANCELLED));
 
     private OrderStatus() {
     }
@@ -38,6 +40,7 @@ public final class OrderStatus {
             case SIGNED -> "已签收";
             case COMPLETED -> "已完成";
             case CANCELLED -> "已取消";
+            case AFTER_SALES -> "售后处理中";
             default -> "未知";
         };
     }

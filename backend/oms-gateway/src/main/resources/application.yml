@@ -46,7 +46,7 @@ spring:
             - id: integration-service
               uri: lb://integration-service
               predicates:
-                - Path=/api/v1/integrations/**,/api/v1/logistics/**
+                - Path=/api/v1/integrations/**,/api/v1/logistics/**,/api/v1/notifications/**
 
 management:
   endpoints:

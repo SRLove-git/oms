@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button, Layout, Menu, Message } from '@arco-design/web-react'
-import { IconHome, IconList, IconUnorderedList } from '@arco-design/web-react/icon'
+import { IconHome, IconList, IconUnorderedList, IconRefresh } from '@arco-design/web-react/icon'
 import { Outlet, useNavigate } from 'react-router-dom'
 
 import { userStore } from '@/stores/user'
@@ -37,6 +37,10 @@ export default function BasicLayout() {
           <MenuItem key="/orders">
             <IconUnorderedList />
             我的订单
+          </MenuItem>
+          <MenuItem key="/after-sales">
+            <IconRefresh />
+            我的售后
           </MenuItem>
         </Menu>
       </Sider>
