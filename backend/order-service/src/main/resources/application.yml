@@ -60,3 +60,8 @@ management:
 logging:
   level:
     com.oms: ${LOG_LEVEL:INFO}
+
+oms:
+  order:
+    timeout-minutes: ${OMS_ORDER_TIMEOUT_MINUTES:30}
+    timeout-scan-ms: ${OMS_ORDER_TIMEOUT_SCAN_MS:60000}

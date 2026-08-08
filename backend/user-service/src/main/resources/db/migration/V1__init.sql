@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     `phone`         VARCHAR(32)     DEFAULT NULL COMMENT '手机号',
     `email`         VARCHAR(128)    DEFAULT NULL COMMENT '邮箱',
     `user_type`     TINYINT         NOT NULL DEFAULT 1 COMMENT '1-平台运营 2-商户 3-终端客户',
+    `merchant_id`   BIGINT UNSIGNED DEFAULT NULL COMMENT '所属商户 ID',
     `status`        TINYINT         NOT NULL DEFAULT 1 COMMENT '1-启用 0-停用',
     `last_login_at` DATETIME        DEFAULT NULL COMMENT '最后登录时间',
     `version`       INT             NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
@@ -17,6 +18,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_username` (`username`),
     KEY `idx_phone` (`phone`),
+    KEY `idx_merchant_id` (`merchant_id`),
     KEY `idx_status` (`status`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT ='用户表';
 

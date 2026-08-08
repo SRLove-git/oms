@@ -86,9 +86,10 @@ services:
       - ./rocketmq/broker.conf:/home/rocketmq/conf/broker.conf:ro
 
   rocketmq-dashboard:
-    image: apache/rocketmq-dashboard:latest
+    image: apacherocketmq/rocketmq-dashboard:2.0.0
     container_name: oms-rocketmq-dashboard
     restart: unless-stopped
+    profiles: ["tools"]
     depends_on:
       - rocketmq-namesrv
     environment:

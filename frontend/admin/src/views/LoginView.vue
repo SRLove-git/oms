@@ -3,11 +3,14 @@ import { reactive, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { useRouter } from 'vue-router'
 
+import { useUserStore } from '@/stores/user'
+
 const router = useRouter()
+const userStore = useUserStore()
 const loading = ref(false)
 const form = reactive({
-  username: '',
-  password: '',
+  username: 'admin',
+  password: 'admin123',
 })
 
 async function handleLogin() {
@@ -16,12 +19,13 @@ async function handleLogin() {
     return
   }
   loading.value = true
-  // TODO: 接入 user-service 登录接口后替换为真实调用
-  setTimeout(() => {
-    loading.value = false
-    Message.info('登录接口待接入')
+  try {
+    await userStore.login(form.username, form.password)
+    Message.success('登录成功')
     router.push('/')
-  }, 500)
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -35,7 +39,7 @@ async function handleLogin() {
         <a-form-item label="密码">
           <a-input-password v-model="form.password" placeholder="请输入密码" />
         </a-form-item>
-        <a-button type="primary" html-type="submit" long :loading="loading"> 登 录 </a-button>
+        <a-button type="primary" html-type="submit" long :loading="loading">登 录</a-button>
       </a-form>
     </a-card>
   </div>

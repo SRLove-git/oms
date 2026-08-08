@@ -41,6 +41,35 @@ mvn -pl user-service -am spring-boot:run
 mvn -B verify
 ```
 
+## 阶段一（P0）已实现能力
+
+| 服务 | 已实现接口 |
+| :--- | :--- |
+| `user-service` | 登录（JWT）、当前用户、用户管理、商户入驻/审核、资质上传/审核、审计日志 |
+| `inventory-service` | SPU/SKU、仓库、入库、库存查询、**预占/释放/扣减/回补**（FEFO + 行级锁）、库存流水 |
+| `order-service` | 下单（调库存预占）、订单详情/列表、取消、发起支付、审核、发货、签收、完成、**超时自动取消**（定时扫描） |
+| `payment-center` | 聚合支付创建（mock/wechat/alipay 适配器）、**回调验签 + 幂等**、退款、支付成功通知订单 |
+| `oms-gateway` | JWT 认证过滤器、用户上下文透传（`X-User-Id` 等） |
+
+### 演示账号（首次启动自动种子，`oms.seed.demo-data=false` 可关闭）
+
+- 平台管理员：`admin / admin123`
+- 演示商户：`merchant / merchant123`
+
+### 端到端冒烟
+
+```bash
+# 1. 启动基础设施
+./scripts/dev-up.sh
+# 2. 启动网关与 4 个核心服务（各开一个终端）
+mvn -pl oms-gateway,user-service,order-service,inventory-service,payment-center -am spring-boot:run
+# 3. 执行冒烟（下单 → 支付 → 审核 → 发货 → 签收 → 完成）
+./scripts/e2e-smoke.sh
+```
+
+> 支付默认 `mock` 渠道（`oms.payment.mock-only=true`），微信/支付宝适配器已预留，商户号与证书就绪后接入。
+> 订单超时默认 30 分钟，可用 `OMS_ORDER_TIMEOUT_MINUTES` 调整。
+
 ## 配置说明
 
 - 所有环境相关配置通过环境变量注入，默认值适配本地 docker-compose，见各服务 `application.yml`。

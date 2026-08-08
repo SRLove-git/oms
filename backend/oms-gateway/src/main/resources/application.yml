@@ -16,35 +16,37 @@ spring:
       username: ${NACOS_USERNAME:nacos}
       password: ${NACOS_PASSWORD:nacos}
     gateway:
-      discovery:
-        locator:
-          enabled: true
-          lower-case-service-id: true
-      routes:
-        - id: user-service
-          uri: lb://user-service
-          predicates:
-            - Path=/api/v1/auth/**,/api/v1/users/**,/api/v1/merchants/**,/api/v1/qualifications/**
-        - id: order-service
-          uri: lb://order-service
-          predicates:
-            - Path=/api/v1/orders/**,/api/v1/carts/**
-        - id: inventory-service
-          uri: lb://inventory-service
-          predicates:
-            - Path=/api/v1/skus/**,/api/v1/warehouses/**,/api/v1/inventories/**,/api/v1/stock-take/**
-        - id: after-sales-service
-          uri: lb://after-sales-service
-          predicates:
-            - Path=/api/v1/return-orders/**,/api/v1/repairs/**,/api/v1/refunds/**
-        - id: payment-center
-          uri: lb://payment-center
-          predicates:
-            - Path=/api/v1/payments/**,/api/v1/payment-callbacks/**,/api/v1/reconciliation/**
-        - id: integration-service
-          uri: lb://integration-service
-          predicates:
-            - Path=/api/v1/integrations/**,/api/v1/logistics/**
+      server:
+        webflux:
+          discovery:
+            locator:
+              enabled: true
+              lower-case-service-id: true
+          routes:
+            - id: user-service
+              uri: lb://user-service
+              predicates:
+                - Path=/api/v1/auth/**,/api/v1/users/**,/api/v1/merchants/**,/api/v1/qualifications/**
+            - id: order-service
+              uri: lb://order-service
+              predicates:
+                - Path=/api/v1/orders/**,/api/v1/carts/**
+            - id: inventory-service
+              uri: lb://inventory-service
+              predicates:
+                - Path=/api/v1/skus/**,/api/v1/warehouses/**,/api/v1/inventories/**,/api/v1/stock-take/**
+            - id: after-sales-service
+              uri: lb://after-sales-service
+              predicates:
+                - Path=/api/v1/return-orders/**,/api/v1/repairs/**,/api/v1/refunds/**
+            - id: payment-center
+              uri: lb://payment-center
+              predicates:
+                - Path=/api/v1/payments/**,/api/v1/payment-callbacks/**,/api/v1/reconciliation/**
+            - id: integration-service
+              uri: lb://integration-service
+              predicates:
+                - Path=/api/v1/integrations/**,/api/v1/logistics/**
 
 management:
   endpoints:
@@ -58,3 +60,7 @@ management:
 logging:
   level:
     com.oms: ${LOG_LEVEL:INFO}
+
+oms:
+  security:
+    jwt-secret: ${OMS_JWT_SECRET:oms-dev-jwt-secret-please-change-0123456789}

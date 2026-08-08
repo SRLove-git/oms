@@ -2,14 +2,26 @@
 import { useRoute, useRouter } from 'vue-router'
 
 import { useAppStore } from '@/stores/app'
+import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
+const userStore = useUserStore()
 
-function onMenuClick(key: string) {
-  if (key !== route.path) {
-    router.push(key)
+type MenuKey = string | number | Record<string, unknown> | undefined
+
+function onMenuClick(key: MenuKey) {
+  const path = typeof key === 'string' ? key : ''
+  if (path !== route.path) {
+    router.push(path)
+  }
+}
+
+function onUserAction(key: MenuKey) {
+  if (key === 'logout') {
+    userStore.logout()
+    router.push('/login')
   }
 }
 </script>
@@ -23,6 +35,14 @@ function onMenuClick(key: string) {
           <template #icon><icon-home /></template>
           首页
         </a-menu-item>
+        <a-menu-item key="/orders">订单管理</a-menu-item>
+        <a-menu-item key="/products">商品管理</a-menu-item>
+        <a-menu-item key="/inventories">库存管理</a-menu-item>
+        <a-menu-item key="/payments">支付记录</a-menu-item>
+        <a-menu-item key="/merchants">商户管理</a-menu-item>
+        <a-menu-item key="/qualifications">资质管理</a-menu-item>
+        <a-menu-item key="/users">用户管理</a-menu-item>
+        <a-menu-item key="/audit-logs">审计日志</a-menu-item>
       </a-menu>
     </a-layout-sider>
 
@@ -33,6 +53,16 @@ function onMenuClick(key: string) {
           <icon-menu-fold v-else />
         </a-button>
         <span class="header-title">{{ route.meta.title ?? 'OMS 管理端' }}</span>
+        <a-space class="header-actions">
+          <a-dropdown @select="onUserAction">
+            <a-button type="text">
+              {{ userStore.user?.realName ?? userStore.user?.username }}
+            </a-button>
+            <template #content>
+              <a-doption value="logout">退出登录</a-doption>
+            </template>
+          </a-dropdown>
+        </a-space>
       </a-layout-header>
 
       <a-layout-content class="basic-content">
@@ -76,6 +106,10 @@ function onMenuClick(key: string) {
 .header-title {
   font-size: 15px;
   font-weight: 500;
+}
+
+.header-actions {
+  margin-left: auto;
 }
 
 .basic-content {

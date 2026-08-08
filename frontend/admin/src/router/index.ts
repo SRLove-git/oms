@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import BasicLayout from '@/layouts/BasicLayout.vue'
+import { useUserStore } from '@/stores/user'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -22,9 +23,65 @@ const router = createRouter({
           component: () => import('@/views/HomeView.vue'),
           meta: { title: '首页' },
         },
+        {
+          path: 'orders',
+          name: 'orders',
+          component: () => import('@/views/OrdersView.vue'),
+          meta: { title: '订单管理' },
+        },
+        {
+          path: 'products',
+          name: 'products',
+          component: () => import('@/views/ProductsView.vue'),
+          meta: { title: '商品管理' },
+        },
+        {
+          path: 'inventories',
+          name: 'inventories',
+          component: () => import('@/views/InventoriesView.vue'),
+          meta: { title: '库存管理' },
+        },
+        {
+          path: 'payments',
+          name: 'payments',
+          component: () => import('@/views/PaymentsView.vue'),
+          meta: { title: '支付记录' },
+        },
+        {
+          path: 'merchants',
+          name: 'merchants',
+          component: () => import('@/views/MerchantsView.vue'),
+          meta: { title: '商户管理' },
+        },
+        {
+          path: 'qualifications',
+          name: 'qualifications',
+          component: () => import('@/views/QualificationsView.vue'),
+          meta: { title: '资质管理' },
+        },
+        {
+          path: 'users',
+          name: 'users',
+          component: () => import('@/views/UsersView.vue'),
+          meta: { title: '用户管理' },
+        },
+        {
+          path: 'audit-logs',
+          name: 'audit-logs',
+          component: () => import('@/views/AuditLogsView.vue'),
+          meta: { title: '审计日志' },
+        },
       ],
     },
   ],
+})
+
+router.beforeEach((to) => {
+  const userStore = useUserStore()
+  if (!userStore.isLoggedIn && to.name !== 'login') {
+    return { name: 'login' }
+  }
+  return true
 })
 
 export default router

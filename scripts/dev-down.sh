@@ -8,4 +8,4 @@ if [[ ! -f "$ENV_FILE" ]]; then
   cp "$ROOT/deploy/.env.example" "$ENV_FILE"
 fi
 
-docker compose --env-file "$ENV_FILE" -f "$ROOT/deploy/docker-compose.yml" down
+docker compose --env-file "$ENV_FILE" -f "$ROOT/deploy/docker-compose.yml" --profile tools down

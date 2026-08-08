@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { Button, Card, Form, Input, Message } from '@arco-design/web-react'
 import { useNavigate } from 'react-router-dom'
 
+import { login } from '@/api/auth'
+import { userStore } from '@/stores/user'
+
 const FormItem = Form.Item
 
 export default function LoginPage() {
@@ -15,18 +18,25 @@ export default function LoginPage() {
       return
     }
     setLoading(true)
-    // TODO: 接入 user-service 登录接口后替换为真实调用
-    setTimeout(() => {
-      setLoading(false)
-      Message.info('登录接口待接入')
+    try {
+      const result = await login(values.username, values.password)
+      userStore.save(result.token, result.user)
+      Message.success('登录成功')
       navigate('/')
-    }, 500)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <div className="login-page">
       <Card className="login-card" title="商家门户登录">
-        <Form form={form} layout="vertical" onSubmit={handleLogin}>
+        <Form
+          form={form}
+          layout="vertical"
+          initialValues={{ username: 'merchant', password: 'merchant123' }}
+          onSubmit={handleLogin}
+        >
           <FormItem
             label="账号"
             field="username"

@@ -60,3 +60,7 @@ management:
 logging:
   level:
     com.oms: ${LOG_LEVEL:INFO}
+
+oms:
+  payment:
+    mock-only: ${OMS_PAYMENT_MOCK_ONLY:true}
