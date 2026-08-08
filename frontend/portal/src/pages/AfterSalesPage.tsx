@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Button,
   Card,
@@ -130,39 +130,36 @@ export default function AfterSalesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [merchantId, page])
 
-  const columns = useMemo(
-    () => [
-      { title: '售后单号', dataIndex: 'returnNo' },
-      { title: '订单号', dataIndex: 'orderNo' },
-      {
-        title: '类型',
-        dataIndex: 'type',
-        render: (value: number) => TYPE_NAMES[value] ?? value,
-      },
-      {
-        title: '状态',
-        dataIndex: 'status',
-        render: (value: number) => (
-          <Tag color={value === 6 ? 'green' : value === 3 || value === 7 ? 'red' : 'arcoblue'}>
-            {STATUS_NAMES[value] ?? value}
-          </Tag>
-        ),
-      },
-      { title: '金额', dataIndex: 'totalAmount' },
-      { title: '申请时间', dataIndex: 'createdAt' },
-      {
-        title: '操作',
-        dataIndex: 'operations',
-        render: (_: unknown, row: ReturnOrderSummary) =>
-          row.status === 1 || row.status === 2 || row.status === 4 ? (
-            <Button size="small" status="danger" onClick={() => doCancel(row)}>
-              取消申请
-            </Button>
-          ) : null,
-      },
-    ],
-    [],
-  )
+  const columns = [
+    { title: '售后单号', dataIndex: 'returnNo' },
+    { title: '订单号', dataIndex: 'orderNo' },
+    {
+      title: '类型',
+      dataIndex: 'type',
+      render: (value: number) => TYPE_NAMES[value] ?? value,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (value: number) => (
+        <Tag color={value === 6 ? 'green' : value === 3 || value === 7 ? 'red' : 'arcoblue'}>
+          {STATUS_NAMES[value] ?? value}
+        </Tag>
+      ),
+    },
+    { title: '金额', dataIndex: 'totalAmount' },
+    { title: '申请时间', dataIndex: 'createdAt' },
+    {
+      title: '操作',
+      dataIndex: 'operations',
+      render: (_: unknown, row: ReturnOrderSummary) =>
+        row.status === 1 || row.status === 2 || row.status === 4 ? (
+          <Button size="small" status="danger" onClick={() => doCancel(row)}>
+            取消申请
+          </Button>
+        ) : null,
+    },
+  ]
 
   return (
     <div>
