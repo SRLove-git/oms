@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: oms
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.example.yaml
+  - gateway.yaml
+  - user-service.yaml
+  - order-service.yaml
+  - inventory-service.yaml
+  - after-sales-service.yaml
+  - payment-center.yaml
+  - integration-service.yaml
+  - hpa.yaml
+  - ingress.yaml
+images:
+  - name: registry.example.com/oms/gateway
+    newName: registry.example.com/oms/gateway
+  - name: registry.example.com/oms/user-service
+    newName: registry.example.com/oms/user-service
+  - name: registry.example.com/oms/order-service
+    newName: registry.example.com/oms/order-service
+  - name: registry.example.com/oms/inventory-service
+    newName: registry.example.com/oms/inventory-service
+  - name: registry.example.com/oms/after-sales-service
+    newName: registry.example.com/oms/after-sales-service
+  - name: registry.example.com/oms/payment-center
+    newName: registry.example.com/oms/payment-center
+  - name: registry.example.com/oms/integration-service
+    newName: registry.example.com/oms/integration-service

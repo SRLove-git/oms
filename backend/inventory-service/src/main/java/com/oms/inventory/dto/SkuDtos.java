@@ -16,7 +16,8 @@ public final class SkuDtos {
             String barcode,
             String udi,
             String registrationNo,
-            BigDecimal price) {
+            BigDecimal price,
+            BigDecimal costPrice) {
     }
 
     public record SkuResponse(
@@ -30,6 +31,7 @@ public final class SkuDtos {
             String udi,
             String registrationNo,
             BigDecimal price,
+            BigDecimal costPrice,
             Integer status) {
     }
 

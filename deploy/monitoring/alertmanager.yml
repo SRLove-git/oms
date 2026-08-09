@@ -1,0 +1,25 @@
+route:
+  group_by: ["alertname", "job"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: ops-webhook
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: ops-critical
+      repeat_interval: 1h
+
+receivers:
+  - name: ops-webhook
+    webhook_configs:
+      - url: "http://example.com/hooks/oms-alert"
+        send_resolved: true
+  - name: ops-critical
+    email_configs:
+      - to: "ops@example.com"
+        from: "oms-alert@example.com"
+        smarthost: "smtp.example.com:587"
+        auth_username: "oms-alert"
+        auth_password: "CHANGE-ME"
+        send_resolved: true

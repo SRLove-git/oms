@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oms-config
+  namespace: oms
+data:
+  # 环境
+  SPRING_PROFILES_ACTIVE: "prod"
+
+  # 中间件地址（K8s 集群内 Service 名；外部托管时改为对应域名/IP）
+  MYSQL_HOST: "oms-mysql"
+  MYSQL_PORT: "3306"
+  MYSQL_USERNAME: "oms"
+  REDIS_HOST: "oms-redis"
+  REDIS_PORT: "6379"
+  NACOS_SERVER_ADDR: "oms-nacos:8848"
+  NACOS_USERNAME: "nacos"
+  NACOS_PASSWORD: "nacos"
+  ROCKETMQ_NAME_SERVER: "oms-rocketmq-namesrv:9876"
+
+  # 业务参数
+  OMS_ORDER_TIMEOUT_MINUTES: "30"
+  OMS_ORDER_ARCHIVE_DAYS: "180"
+  OMS_REPORT_CACHE_TTL_SECONDS: "300"
+  # 真实支付渠道就绪后置 false，并通过 Secret 注入渠道证书/密钥
+  OMS_PAYMENT_MOCK_ONLY: "true"
+
+  # 日志
+  LOG_LEVEL: "INFO"

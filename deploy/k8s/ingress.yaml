@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oms-ingress
+  namespace: oms
+  annotations:
+    # nginx-ingress 示例；生产建议接入 WAF 与限流
+    nginx.ingress.kubernetes.io/proxy-body-size: "8m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    # 灰度发布（可选）：旧版本 weighted-svc 权重 90，新版本 10，稳定后切满
+    # nginx.ingress.kubernetes.io/canary: "true"
+    # nginx.ingress.kubernetes.io/canary-weight: "10"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - oms.example.com
+      secretName: oms-tls
+  rules:
+    - host: oms.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: oms-gateway
+                port:
+                  number: 8080

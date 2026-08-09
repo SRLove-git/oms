@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: after-sales-service
+  namespace: oms
+  labels:
+    app: after-sales-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: after-sales-service
+  template:
+    metadata:
+      labels:
+        app: after-sales-service
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: after-sales-service
+          image: registry.example.com/oms/after-sales-service:v0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8084
+              name: http
+          envFrom:
+            - configMapRef:
+                name: oms-config
+            - secretRef:
+                name: oms-secret
+          env:
+            - name: SERVER_PORT
+              value: "8084"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: after-sales-service
+  namespace: oms
+spec:
+  selector:
+    app: after-sales-service
+  ports:
+    - port: 8084
+      targetPort: 8084
+      name: http

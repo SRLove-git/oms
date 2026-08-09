@@ -35,6 +35,7 @@ class OrderServiceTest {
     private OrderLogMapper orderLogMapper;
     private InventoryClient inventoryClient;
     private PaymentClient paymentClient;
+    private OrderArchiveService orderArchiveService;
     private OrderService orderService;
 
     @BeforeEach
@@ -45,14 +46,21 @@ class OrderServiceTest {
         orderLogMapper = mock(OrderLogMapper.class);
         inventoryClient = mock(InventoryClient.class);
         paymentClient = mock(PaymentClient.class);
+        orderArchiveService = mock(OrderArchiveService.class);
         orderService = new OrderService(
-                orderMapper, orderItemMapper, orderPaymentMapper, orderLogMapper, inventoryClient, paymentClient);
+                orderMapper,
+                orderItemMapper,
+                orderPaymentMapper,
+                orderLogMapper,
+                inventoryClient,
+                paymentClient,
+                orderArchiveService);
         setField(orderService, "timeoutMinutes", 30L);
     }
 
     @Test
     void createShouldReserveThenPersistOrder() {
-        SkuInfo sku = new SkuInfo(1L, "SKU001", "测试商品", new BigDecimal("100.00"), 1);
+        SkuInfo sku = new SkuInfo(1L, "SKU001", "测试商品", new BigDecimal("100.00"), new BigDecimal("60.00"), 1);
         when(inventoryClient.getSku(1L)).thenReturn(Result.ok(sku));
         when(inventoryClient.reserve(any())).thenReturn(Result.ok());
         when(orderMapper.insert(any(Order.class))).thenAnswer(invocation -> {

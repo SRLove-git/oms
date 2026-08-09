@@ -47,6 +47,13 @@ function onUserAction(key: MenuKey) {
         <a-menu-item key="/reconciliation">支付对账</a-menu-item>
         <a-menu-item key="/logistics">物流轨迹</a-menu-item>
         <a-menu-item key="/notifications">消息通知</a-menu-item>
+        <a-sub-menu key="reports">
+          <template #title>报表中心</template>
+          <a-menu-item key="/reports/sales">销售报表</a-menu-item>
+          <a-menu-item key="/reports/inventory">库存报表</a-menu-item>
+          <a-menu-item key="/reports/payments">支付报表</a-menu-item>
+          <a-menu-item key="/reports/aftersales">售后报表</a-menu-item>
+        </a-sub-menu>
       </a-menu>
     </a-layout-sider>
 

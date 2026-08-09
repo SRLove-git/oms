@@ -129,6 +129,7 @@ public class InventoryService {
                     break;
                 }
                 int take = Math.min(needed, row.getReservedQuantity());
+                int beforeReserved = row.getReservedQuantity();
                 int affected = inventoryMapper.update(
                         null,
                         new LambdaUpdateWrapper<Inventory>()
@@ -137,7 +138,7 @@ public class InventoryService {
                                 .setSql("reserved_quantity = reserved_quantity - " + take));
                 if (affected > 0) {
                     needed -= take;
-                    recordTransaction(row, BIZ_DEDUCT, 0, operatorId, request.orderNo(), "支付成功扣减");
+                    recordDeductTransaction(row, take, beforeReserved, operatorId, request.orderNo());
                 }
             }
             if (needed > 0) {
@@ -280,6 +281,26 @@ public class InventoryService {
         tx.setAfterQuantity(row.getQuantity() + changeQuantity);
         tx.setOperatorId(operatorId);
         tx.setRemark(remark);
+        transactionMapper.insert(tx);
+    }
+
+    /**
+     * 扣减流水：change_quantity 记录出库数量（负值），before/after 记录预占数量变化，
+     * 保证流水守恒并支撑库存周转率报表。
+     */
+    private void recordDeductTransaction(
+            Inventory row, int take, int beforeReserved, Long operatorId, String bizNo) {
+        InventoryTransaction tx = new InventoryTransaction();
+        tx.setWarehouseId(row.getWarehouseId());
+        tx.setSkuId(row.getSkuId());
+        tx.setBatchNo(row.getBatchNo());
+        tx.setBizType(BIZ_DEDUCT);
+        tx.setBizNo(bizNo);
+        tx.setChangeQuantity(-take);
+        tx.setBeforeQuantity(beforeReserved);
+        tx.setAfterQuantity(beforeReserved - take);
+        tx.setOperatorId(operatorId);
+        tx.setRemark("支付成功扣减");
         transactionMapper.insert(tx);
     }
 

@@ -80,6 +80,32 @@ pnpm dev
 
 > 第三方电商平台（天猫/京东）与真实支付/物流渠道为 mock 适配，商户号与平台权限就绪后替换适配器即可接入。
 
+## 阶段三（P2 报表与优化）已交付
+
+- 报表中心：销售（汇总/趋势/来源/每日快照）、库存（仓库库存/效期分布/周转 TOP/滞销预警）、支付（渠道交易/对账差异）、售后（类型/原因分布/维修时长/退货率）
+- 数据大盘：管理端首页升级为经营大盘（KPI + 销售趋势/效期分布/支付渠道/售后类型）
+- 报表导出：所有报表支持 CSV 导出（UTF-8 BOM，Excel 直接打开）
+- 历史订单冷热分离：终态订单超阈值自动归档至冷表，订单详情与报表口径不受影响（详见 `docs/adr/0002-cold-hot-order-archive.md`）
+- 性能优化：报表查询 Redis 缓存（5 分钟 TTL）、报表索引落地、库存扣减流水口径修正
+- 验证脚本：`scripts/report-smoke.sh`（报表冒烟）、`scripts/benchmark.sh`（读侧压测），压测说明见 `docs/report/performance-test.md`
+
+## 阶段四（测试与验收）已交付
+
+- SIT 用例套件：`scripts/sit-test.sh`（29 项用例，覆盖认证权限、交易主链路、超时、售后、对账、报表、归档、审计）
+- 安全冒烟：`scripts/security-test.sh`（17 项用例：认证绕过、越权、注入、畸形输入、敏感端点）
+- 性能压测：`N=5000 C=100 ./scripts/benchmark.sh`，P99 55–192ms，全部达标
+- 合规预评审与验收报告：见 [docs/sit/](./docs/sit/)（SIT 用例、安全报告、压测报告、合规评审、UAT 计划、验收报告）
+- 验收结论：满足《项目要求》7.8 六项标准（真实渠道/生产环境类项列入 M6 上线前置清单）
+
+## 阶段五（上线与护航）已交付
+
+- K8s 生产编排：[deploy/k8s/](./deploy/k8s/)（7 服务 Deployment/Service + HPA + Ingress + kustomize），含灰度发布与回滚说明
+- 监控告警：[deploy/monitoring/](./deploy/monitoring/)（Prometheus + Alertmanager + Grafana，7 个采集目标 UP、5 条告警规则）
+- 回滚演练脚本：`scripts/k8s-rollback-drill.sh`
+- 护航与交接文档：[docs/ops/](./docs/ops/)（上线演练手册、值班 Runbook、文档交接、项目复盘）
+- 修复：各服务补充 `micrometer-registry-prometheus` 依赖，`/actuator/prometheus` 指标端点可用
+- 说明：M6 以“就绪 + 本地/预发演练”口径达成；真实生产部署（生产集群、真实渠道资质、渗透测试）列入上线检查清单跟踪
+
 ## 文档
 
 - [backend/README.md](./backend/README.md)：后端模块说明与启动方式

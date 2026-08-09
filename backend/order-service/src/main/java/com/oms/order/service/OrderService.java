@@ -51,6 +51,7 @@ public class OrderService {
     private final OrderLogMapper orderLogMapper;
     private final InventoryClient inventoryClient;
     private final PaymentClient paymentClient;
+    private final OrderArchiveService orderArchiveService;
 
     @Value("${oms.order.timeout-minutes:30}")
     private long timeoutMinutes;
@@ -61,13 +62,15 @@ public class OrderService {
             OrderPaymentMapper orderPaymentMapper,
             OrderLogMapper orderLogMapper,
             InventoryClient inventoryClient,
-            PaymentClient paymentClient) {
+            PaymentClient paymentClient,
+            OrderArchiveService orderArchiveService) {
         this.orderMapper = orderMapper;
         this.orderItemMapper = orderItemMapper;
         this.orderPaymentMapper = orderPaymentMapper;
         this.orderLogMapper = orderLogMapper;
         this.inventoryClient = inventoryClient;
         this.paymentClient = paymentClient;
+        this.orderArchiveService = orderArchiveService;
     }
 
     @Transactional
@@ -136,6 +139,8 @@ public class OrderService {
             orderItem.setQuantity(item.quantity());
             orderItem.setUnitPrice(sku.price());
             orderItem.setTotalPrice(sku.price().multiply(BigDecimal.valueOf(item.quantity())));
+            BigDecimal cost = sku.costPrice() == null ? BigDecimal.ZERO : sku.costPrice();
+            orderItem.setCostAmount(cost.multiply(BigDecimal.valueOf(item.quantity())));
             orderItemMapper.insert(orderItem);
         }
 
@@ -153,7 +158,10 @@ public class OrderService {
     }
 
     public OrderResponse get(String orderNo) {
-        Order order = findOrder(orderNo);
+        Order order = findOrderOrNull(orderNo);
+        if (order == null) {
+            return orderArchiveService.getByOrderNo(orderNo);
+        }
         List<OrderItem> items = orderItemMapper.selectList(new LambdaQueryWrapper<OrderItem>()
                 .eq(OrderItem::getOrderId, order.getId())
                 .eq(OrderItem::getDeleted, 0)
@@ -358,13 +366,18 @@ public class OrderService {
     }
 
     private Order findOrder(String orderNo) {
+        Order order = findOrderOrNull(orderNo);
+        if (order == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "订单不存在");
+        }
+        return order;
+    }
+
+    private Order findOrderOrNull(String orderNo) {
         Order order = orderMapper.selectOne(new LambdaQueryWrapper<Order>()
                 .eq(Order::getOrderNo, orderNo)
                 .eq(Order::getDeleted, 0)
                 .last("LIMIT 1"));
-        if (order == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "订单不存在");
-        }
         return order;
     }
 

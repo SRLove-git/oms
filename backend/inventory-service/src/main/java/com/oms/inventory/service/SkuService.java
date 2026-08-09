@@ -59,6 +59,7 @@ public class SkuService {
         sku.setUdi(request.udi());
         sku.setRegistrationNo(request.registrationNo());
         sku.setPrice(request.price() == null ? BigDecimal.ZERO : request.price());
+        sku.setCostPrice(request.costPrice() == null ? BigDecimal.ZERO : request.costPrice());
         sku.setStatus(1);
         skuMapper.insert(sku);
         return sku.getId();
@@ -120,6 +121,7 @@ public class SkuService {
                 sku.getUdi(),
                 sku.getRegistrationNo(),
                 sku.getPrice(),
+                sku.getCostPrice(),
                 sku.getStatus());
     }
 }

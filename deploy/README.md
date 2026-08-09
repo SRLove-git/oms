@@ -42,3 +42,9 @@ docker build -f deploy/docker/Dockerfile \
 ## k8s
 
 生产 K8s 编排（Deployment/HPA/Ingress）在 `k8s/` 目录规划，随阶段 1 联调环境一并落地。
+
+阶段五已完成：见 [k8s/README.md](./k8s/README.md)（7 服务编排、灰度发布、回滚），回滚演练脚本 `scripts/k8s-rollback-drill.sh`。
+
+## 监控告警
+
+见 [monitoring/README.md](./monitoring/README.md)：Prometheus + Alertmanager + Grafana 本地一键启动（`docker compose -f deploy/monitoring/docker-compose.monitoring.yml up -d`），采集 7 个服务 `/actuator/prometheus`，内置 5 条告警规则。

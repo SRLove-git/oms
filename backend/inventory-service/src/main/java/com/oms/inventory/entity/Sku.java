@@ -18,6 +18,7 @@ public class Sku {
     private String udi;
     private String registrationNo;
     private BigDecimal price;
+    private BigDecimal costPrice;
     private Integer status;
     private Integer version;
     private Integer deleted;
@@ -92,6 +93,14 @@ public class Sku {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public BigDecimal getCostPrice() {
+        return costPrice;
+    }
+
+    public void setCostPrice(BigDecimal costPrice) {
+        this.costPrice = costPrice;
     }
 
     public Integer getStatus() {

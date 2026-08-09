@@ -1,1 +1,2 @@
 com.oms.common.redis.config.RedisConfig
+com.oms.common.redis.cache.ReportCache

@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @FeignClient(name = "order-service", path = "/api/v1/orders")
 public interface OrderClient {
@@ -20,6 +21,10 @@ public interface OrderClient {
 
     @PostMapping("/internal/{orderNo}/after-sales-complete")
     Result<Void> notifyAfterSalesComplete(@PathVariable String orderNo);
+
+    @GetMapping("/internal/completed-count")
+    Result<CompletedOrderCount> completedCount(
+            @RequestParam("startDate") String startDate, @RequestParam("endDate") String endDate);
 
     record OrderDetail(
             Long id,
@@ -37,5 +42,8 @@ public interface OrderClient {
     }
 
     record AfterSalesNotifyRequest(String returnNo, Integer type, Integer orderStatus) {
+    }
+
+    record CompletedOrderCount(long completedCount) {
     }
 }

@@ -11,7 +11,12 @@ import com.oms.order.dto.OrderDtos.OrderResponse;
 import com.oms.order.dto.OrderDtos.OrderSummaryResponse;
 import com.oms.order.dto.OrderDtos.PayRequest;
 import com.oms.order.dto.OrderDtos.ShipRequest;
+import com.oms.order.dto.OrderReportDtos.CompletedOrderCount;
+import com.oms.order.service.OrderArchiveService;
 import com.oms.order.service.OrderService;
+import com.oms.order.service.OrderReportService;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,9 +31,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class OrderController {
 
     private final OrderService orderService;
+    private final OrderArchiveService orderArchiveService;
+    private final OrderReportService orderReportService;
 
-    public OrderController(OrderService orderService) {
+    public OrderController(
+            OrderService orderService,
+            OrderArchiveService orderArchiveService,
+            OrderReportService orderReportService) {
         this.orderService = orderService;
+        this.orderArchiveService = orderArchiveService;
+        this.orderReportService = orderReportService;
     }
 
     @PostMapping
@@ -67,6 +79,30 @@ public class OrderController {
             }
         }
         return Result.ok(order);
+    }
+
+    @GetMapping("/archived")
+    public Result<PageResult<OrderSummaryResponse>> archived(
+            @RequestHeader(value = "X-User-Type", required = false) Integer userType,
+            @RequestHeader(value = "X-Merchant-Id", required = false) Long merchantId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Long filterMerchant = (userType != null && userType == 1) ? null : merchantId;
+        return Result.ok(orderArchiveService.pageArchived(filterMerchant, page, size));
+    }
+
+    @PostMapping("/archive/run")
+    public Result<Integer> archiveRun(
+            @RequestHeader(value = "X-User-Type", required = false) Integer userType) {
+        requireAdmin(userType);
+        return Result.ok(orderArchiveService.archiveAll());
+    }
+
+    @GetMapping("/internal/completed-count")
+    public Result<CompletedOrderCount> completedCount(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        return Result.ok(new CompletedOrderCount(orderReportService.completedCount(startDate, endDate)));
     }
 
     @PostMapping("/{orderNo}/cancel")

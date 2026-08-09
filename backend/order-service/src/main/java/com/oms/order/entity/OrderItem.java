@@ -18,6 +18,7 @@ public class OrderItem {
     private Integer quantity;
     private BigDecimal unitPrice;
     private BigDecimal totalPrice;
+    private BigDecimal costAmount;
     private String batchNo;
     private String serialNo;
     private LocalDate expireAt;
@@ -86,6 +87,14 @@ public class OrderItem {
 
     public void setTotalPrice(BigDecimal totalPrice) {
         this.totalPrice = totalPrice;
+    }
+
+    public BigDecimal getCostAmount() {
+        return costAmount;
+    }
+
+    public void setCostAmount(BigDecimal costAmount) {
+        this.costAmount = costAmount;
     }
 
     public String getBatchNo() {

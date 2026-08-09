@@ -1,0 +1,55 @@
+groups:
+  - name: oms-core
+    rules:
+      - alert: OmsServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OMS 服务不可用 {{ $labels.job }}"
+          description: "Prometheus 已连续 2 分钟无法采集 {{ $labels.job }} 的指标。"
+
+      - alert: OmsHighErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) by (job)
+            /
+          clamp_min(sum(rate(http_server_requests_seconds_count[5m])) by (job), 1)
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} 5xx 错误率超过 5%"
+          description: "5xx 错误率 5 分钟均值超阈值，请检查服务日志与依赖。"
+
+      - alert: OmsCoreP99High
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_server_requests_seconds_bucket[5m])) by (le, job))
+          > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} 核心接口 P99 超过 500ms"
+          description: "P99 5 分钟均值 > 500ms，命中项目要求 7.2 性能红线。"
+
+      - alert: OmsHighCpu
+        expr: process_cpu_usage > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} CPU 使用率超过 85%"
+          description: "进程 CPU 连续 10 分钟 > 85%，检查慢 SQL/线程池/GC。"
+
+      - alert: OmsOrderArchiveStuck
+        expr: |
+          absent(process_uptime_seconds{job="oms-order-service"})
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "订单服务不可达，归档/超时扫描可能停摆"
+          description: "订单服务下线期间，超时取消与历史归档任务不会执行，恢复后检查积压。"

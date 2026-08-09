@@ -6,6 +6,11 @@
 | [SCHEDULE.md](../SCHEDULE.md) | 排期计划、WBS、Sprint、里程碑 |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | 贡献指南与协作流程 |
 | [adr/](./adr/) | 架构决策记录（ADR） |
+| [report/performance-test.md](./report/performance-test.md) | 性能压测说明（阶段三） |
+| [sit/](./sit/) | 阶段四测试与验收文档（SIT/安全/压测/合规/UAT/验收） |
+| [ops/](./ops/) | 阶段五上线与护航文档（上线演练、值班 Runbook、交接、复盘） |
+| [../deploy/k8s/](../deploy/k8s/README.md) | K8s 生产编排（部署/灰度/回滚） |
+| [../deploy/monitoring/](../deploy/monitoring/README.md) | 监控告警（Prometheus/Alertmanager/Grafana） |
 | [../backend/README.md](../backend/README.md) | 后端模块与启动方式 |
 | [../frontend/README.md](../frontend/README.md) | 前端工程说明 |
 

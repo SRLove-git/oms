@@ -73,6 +73,45 @@ mvn -pl oms-gateway,user-service,order-service,inventory-service,after-sales-ser
 > 订单超时默认 30 分钟，可用 `OMS_ORDER_TIMEOUT_MINUTES` 调整。
 > 售后/物流/第三方平台/通知均提供 mock 适配，真实渠道资质就绪后替换适配器即可。
 
+## 阶段三（P2 报表与优化）已实现能力
+
+### 报表接口（统一经网关 `/api/v1/reports/**` 访问，管理端需管理员 token）
+
+| 服务 | 路径 | 说明 |
+| :--- | :--- | :--- |
+| order-service | `/api/v1/reports/sales/summary` | 经营汇总：订单数、支付金额、客单价、毛利、退款金额、复购率 |
+| order-service | `/api/v1/reports/sales/trend` | 按日销售趋势 |
+| order-service | `/api/v1/reports/sales/source` | 订单来源（B2B/B2C） |
+| order-service | `/api/v1/reports/sales/daily` | 每日销售快照（定时生成，`OMS_REPORT_DAILY_CRON` 默认每日 01:10，启动时回填近 7 天） |
+| inventory-service | `/api/v1/reports/inventory/warehouse-stock`、`stock-summary` | 仓库库存与汇总 |
+| inventory-service | `/api/v1/reports/inventory/expiry-distribution` | 效期分布（已过期/0-90/91-180/181-365/365+） |
+| inventory-service | `/api/v1/reports/inventory/turnover` | 库存周转 TOP（出库量/当前库存） |
+| inventory-service | `/api/v1/reports/inventory/slow-moving` | 滞销预警（默认 90 天未动销且有库存） |
+| payment-center | `/api/v1/reports/payments/channel-stats` | 渠道交易与退款率 |
+| payment-center | `/api/v1/reports/payments/reconciliation-stats` | 对账差异统计 |
+| after-sales-service | `/api/v1/reports/aftersales/type-stats`、`reason-distribution`、`repair-duration`、`return-rate` | 售后类型/原因/维修时长/退货率 |
+
+所有报表接口均支持 CSV 导出：`/export?type=...`（如 `/api/v1/reports/sales/export?type=trend`），输出 UTF-8 BOM，Excel 可直接打开。
+
+### 性能优化
+
+- 销售/库存/支付报表结果缓存至 Redis（`oms:report:*`，默认 TTL 5 分钟），缓存异常自动降级。
+- 报表查询索引通过各服务 Flyway 迁移落地（见 `docs/report/performance-test.md`）。
+- 压测脚本：`scripts/benchmark.sh`；冒烟脚本：`scripts/report-smoke.sh`。
+
+### 历史订单冷热分离
+
+- 终态订单（已完成/已取消）超过 `OMS_ORDER_ARCHIVE_DAYS`（默认 180 天）后由定时任务归档至 `order_archive` 等冷表（批大小 `OMS_ORDER_ARCHIVE_BATCH_SIZE`，默认 200）。
+- 手动触发：`POST /api/v1/orders/archive/run`（管理员）；历史单查询：`GET /api/v1/orders/archived`；订单详情自动回退冷表。
+- 报表统计对热冷表做 UNION 聚合，归档不影响长周期口径。详见 `docs/adr/0002-cold-hot-order-archive.md`。
+
+### 冒烟
+
+```bash
+# 阶段三报表冒烟（依赖阶段一/二冒烟产生的数据）
+./scripts/report-smoke.sh
+```
+
 ## 配置说明
 
 - 所有环境相关配置通过环境变量注入，默认值适配本地 docker-compose，见各服务 `application.yml`。

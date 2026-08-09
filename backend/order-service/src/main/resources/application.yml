@@ -65,3 +65,9 @@ oms:
   order:
     timeout-minutes: ${OMS_ORDER_TIMEOUT_MINUTES:30}
     timeout-scan-ms: ${OMS_ORDER_TIMEOUT_SCAN_MS:60000}
+    archive-days: ${OMS_ORDER_ARCHIVE_DAYS:180}
+    archive-scan-ms: ${OMS_ORDER_ARCHIVE_SCAN_MS:3600000}
+    archive-batch-size: ${OMS_ORDER_ARCHIVE_BATCH_SIZE:200}
+  report:
+    cache-ttl-seconds: ${OMS_REPORT_CACHE_TTL_SECONDS:300}
+    daily-cron: ${OMS_REPORT_DAILY_CRON:0 10 1 * * ?}
