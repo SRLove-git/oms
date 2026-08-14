@@ -5,6 +5,7 @@
 | [项目要求.md](../项目要求.md) | 需求、技术方案、验收标准（权威需求源） |
 | [SCHEDULE.md](../SCHEDULE.md) | 排期计划、WBS、Sprint、里程碑 |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | 贡献指南与协作流程 |
+| [open-api.md](./open-api.md) | 商城对接开放 API（签名、幂等下单、商品/库存查询） |
 | [adr/](./adr/) | 架构决策记录（ADR） |
 | [report/performance-test.md](./report/performance-test.md) | 性能压测说明（阶段三） |
 | [sit/](./sit/) | 阶段四测试与验收文档（SIT/安全/压测/合规/UAT/验收） |

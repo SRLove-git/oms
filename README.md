@@ -10,6 +10,7 @@
 | :--- | :--- |
 | 管理端 | Vue 3 + TypeScript + Arco Design Vue + Vite + Pinia |
 | 商家门户 | React 19 + TypeScript + Arco Design React + Vite |
+| 移动端 H5 | Vue 3 + TypeScript + Arco Design Vue + Vite（移动优先布局） |
 | 后端 | Spring Boot 4.1 + Spring Cloud 2025.1 + Spring Cloud Alibaba 2025.1（JDK 21） |
 | 中间件 | MySQL 8、Redis、RocketMQ、Nacos、MinIO（OSS 模拟） |
 | 部署 | Docker / docker-compose（本地）、K8s（生产规划） |
@@ -56,7 +57,7 @@ pnpm install
 pnpm dev
 ```
 
-管理端默认 `http://localhost:5173`，商家门户默认 `http://localhost:5174`，开发环境 API 代理到网关 `8080`。
+管理端默认 `http://localhost:5173`，商家门户默认 `http://localhost:5174`，移动端 H5 默认 `http://localhost:5175`，开发环境 API 代理到网关 `8080`。
 
 ## 阶段一（P0 核心交易链路）已交付
 
@@ -105,6 +106,17 @@ pnpm dev
 - 护航与交接文档：[docs/ops/](./docs/ops/)（上线演练手册、值班 Runbook、文档交接、项目复盘）
 - 修复：各服务补充 `micrometer-registry-prometheus` 依赖，`/actuator/prometheus` 指标端点可用
 - 说明：M6 以“就绪 + 本地/预发演练”口径达成；真实生产部署（生产集群、真实渠道资质、渗透测试）列入上线检查清单跟踪
+
+## 阶段六（工程完善）已交付
+
+- 前端体验：管理端/门户端/移动端接入 **i18n 中英文切换**（vue-i18n / react-i18next，Arco locale 同步）与 **亮/暗主题切换**（`body[arco-theme]`，持久化）
+- 移动端 H5：[frontend/mobile/](./frontend/mobile/)（商品搜索/详情/下单/支付、订单状态操作、售后申请、我的；5175 端口）
+- OpenAPI 文档：全服务 springdoc，网关聚合 Swagger UI `http://localhost:8080/swagger-ui.html`（免认证）
+- Sentinel 流控：网关路由/API 分组限流（下单 300 QPS、支付回调 1000 QPS 等）+ 订单/支付核心方法 `@SentinelResource` 限流与 RT 降级（详见 `docs/adr/0003-open-api-and-traffic-control.md`）
+- 商城对接开放 API：`/api/v1/open/**`（HMAC 签名 + 防重放 + appId→商户映射；商品/库存查询、幂等下单、查单、取消），文档 [docs/open-api.md](./docs/open-api.md)，冒烟 `scripts/open-api-smoke.sh`
+- 核心链路加固：取消/超时/支付回调条件状态流转防并发覆盖，回调金额校验，支付单幂等覆盖已支付态，退款金额校验（详见 `docs/adr/0003`）
+- 前端测试：管理端/门户端/移动端接入 Vitest（组件/状态/i18n 用例，共 27 例）
+- 后端测试补强：订单/库存/支付核心链路单测扩充（订单 28、库存 14、支付 17、网关 7，全量 76 用例通过）
 
 ## 文档
 
