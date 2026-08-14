@@ -87,9 +87,23 @@ public class SkuService {
     }
 
     public PageResult<SkuResponse> page(String keyword, int page, int size) {
+        return pageInternal(keyword, page, size, false);
+    }
+
+    /**
+     * 商城开放 API 商品列表：仅返回在售 SKU。
+     */
+    public PageResult<SkuResponse> pageOnSale(String keyword, int page, int size) {
+        return pageInternal(keyword, page, size, true);
+    }
+
+    private PageResult<SkuResponse> pageInternal(String keyword, int page, int size, boolean onSaleOnly) {
         LambdaQueryWrapper<Sku> wrapper = new LambdaQueryWrapper<Sku>()
                 .eq(Sku::getDeleted, 0)
                 .orderByDesc(Sku::getId);
+        if (onSaleOnly) {
+            wrapper.eq(Sku::getStatus, 1);
+        }
         if (StringUtils.hasText(keyword)) {
             wrapper.and(w -> w.like(Sku::getName, keyword).or().like(Sku::getSkuNo, keyword));
         }

@@ -12,9 +12,11 @@ public class Order {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String orderNo;
+    private String externalOrderNo;
     private Long merchantId;
     private Long customerId;
     private Integer orderType;
+    private String source;
     private Integer status;
     private BigDecimal totalAmount;
     private BigDecimal payAmount;
@@ -45,6 +47,14 @@ public class Order {
         this.orderNo = orderNo;
     }
 
+    public String getExternalOrderNo() {
+        return externalOrderNo;
+    }
+
+    public void setExternalOrderNo(String externalOrderNo) {
+        this.externalOrderNo = externalOrderNo;
+    }
+
     public Long getMerchantId() {
         return merchantId;
     }
@@ -67,6 +77,14 @@ public class Order {
 
     public void setOrderType(Integer orderType) {
         this.orderType = orderType;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
     }
 
     public Integer getStatus() {

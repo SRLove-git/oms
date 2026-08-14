@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,6 +16,8 @@ import com.oms.payment.client.OrderClient;
 import com.oms.payment.dto.PaymentDtos.CallbackRequest;
 import com.oms.payment.dto.PaymentDtos.CreatePaymentRequest;
 import com.oms.payment.dto.PaymentDtos.CreatePaymentResponse;
+import com.oms.payment.dto.PaymentDtos.RefundRequest;
+import com.oms.payment.entity.PaymentNotifyLog;
 import com.oms.payment.entity.PaymentTransaction;
 import com.oms.payment.mapper.PaymentNotifyLogMapper;
 import com.oms.payment.mapper.PaymentTransactionMapper;
@@ -23,6 +26,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class PaymentServiceTest {
 
@@ -41,6 +45,8 @@ class PaymentServiceTest {
         setField(paymentService, "mockOnly", true);
     }
 
+    // ---------- 创建支付 ----------
+
     @Test
     void mockChannelShouldCreatePayment() {
         when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(null);
@@ -54,7 +60,71 @@ class PaymentServiceTest {
 
         assertThat(response.paymentNo()).isNotBlank();
         assertThat(response.channel()).isEqualTo("mock");
+        assertThat(response.amount()).isEqualByComparingTo("100.00");
+        verify(transactionMapper).insert(any(PaymentTransaction.class));
     }
+
+    @Test
+    void createShouldRejectNonMockChannelInMockOnlyMode() {
+        assertThatThrownBy(() -> paymentService.create(
+                        new CreatePaymentRequest("O001", new BigDecimal("100.00"), "CNY", "wechat", 1L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("仅支持 mock 渠道");
+        verify(transactionMapper, never()).insert(any(PaymentTransaction.class));
+    }
+
+    @Test
+    void createShouldDefaultNullChannelToMock() {
+        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(transactionMapper.insert(any(PaymentTransaction.class))).thenAnswer(invocation -> {
+            ((PaymentTransaction) invocation.getArgument(0)).setId(1L);
+            return 1;
+        });
+
+        CreatePaymentResponse response = paymentService.create(
+                new CreatePaymentRequest("O001", new BigDecimal("100.00"), "CNY", null, 1L));
+
+        assertThat(response.channel()).isEqualTo("mock");
+        verify(transactionMapper).insert(any(PaymentTransaction.class));
+    }
+
+    @Test
+    void createShouldRejectUnsupportedChannelWhenMockOnlyDisabled() throws Exception {
+        setField(paymentService, "mockOnly", false);
+
+        assertThatThrownBy(() -> paymentService.create(
+                        new CreatePaymentRequest("O001", new BigDecimal("100.00"), "CNY", "unknown", 1L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("暂不支持该支付渠道");
+        verify(transactionMapper, never()).insert(any(PaymentTransaction.class));
+    }
+
+    @Test
+    void createShouldReturnExistingPaymentForSameOrder() {
+        PaymentTransaction existing = transaction(1);
+        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(existing);
+
+        CreatePaymentResponse response = paymentService.create(
+                new CreatePaymentRequest("O001", new BigDecimal("100.00"), "CNY", "mock", 1L));
+
+        assertThat(response.paymentNo()).isEqualTo("P001");
+        assertThat(response.channel()).isEqualTo("mock");
+        assertThat(response.amount()).isEqualByComparingTo("100.00");
+        verify(transactionMapper, never()).insert(any(PaymentTransaction.class));
+    }
+
+    @Test
+    void createShouldRejectWhenOrderAlreadyPaid() {
+        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(transaction(2));
+
+        assertThatThrownBy(() -> paymentService.create(
+                        new CreatePaymentRequest("O001", new BigDecimal("100.00"), "CNY", "mock", 1L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已支付");
+        verify(transactionMapper, never()).insert(any(PaymentTransaction.class));
+    }
+
+    // ---------- 回调处理 ----------
 
     @Test
     void callbackShouldNotifyOrderOnce() {
@@ -79,6 +149,113 @@ class PaymentServiceTest {
         assertThatThrownBy(() -> paymentService.handleCallback(
                         "mock", new CallbackRequest("P001", "TXN1", new BigDecimal("99.00"), "SUCCESS")))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void callbackShouldRejectUnknownPayment() {
+        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+
+        assertThatThrownBy(() -> paymentService.handleCallback(
+                        "mock", new CallbackRequest("NOPE", "TXN1", new BigDecimal("100.00"), "SUCCESS")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("支付单不存在");
+    }
+
+    @Test
+    void callbackShouldRejectNonSuccessStatusAndRecordVerifyFailure() {
+        PaymentTransaction transaction = transaction(1);
+        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(transaction);
+
+        assertThatThrownBy(() -> paymentService.handleCallback(
+                        "mock", new CallbackRequest("P001", "TXN1", new BigDecimal("100.00"), "FAILED")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("支付状态非成功");
+
+        verify(transactionMapper, never()).updateById(any(PaymentTransaction.class));
+        verify(orderClient, never()).notifyPaymentSuccess(any());
+        ArgumentCaptor<PaymentNotifyLog> logCaptor = ArgumentCaptor.forClass(PaymentNotifyLog.class);
+        verify(notifyLogMapper).insert(logCaptor.capture());
+        assertThat(logCaptor.getValue().getVerifyResult()).isZero();
+        assertThat(logCaptor.getValue().getHandleResult()).contains("支付状态非成功");
+        assertThat(logCaptor.getValue().getPaymentNo()).isEqualTo("P001");
+    }
+
+    @Test
+    void callbackDuplicateShouldNotUpdateOrNotifyAgain() {
+        PaymentTransaction transaction = transaction(1);
+        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(transaction);
+        when(orderClient.notifyPaymentSuccess(any())).thenReturn(null);
+
+        CallbackRequest callback =
+                new CallbackRequest("P001", "TXN1", new BigDecimal("100.00"), "SUCCESS");
+        paymentService.handleCallback("mock", callback);
+        paymentService.handleCallback("mock", callback);
+
+        verify(transactionMapper, times(1)).updateById(transaction);
+        verify(notifyLogMapper, times(1)).insert(any(PaymentNotifyLog.class));
+        verify(orderClient, times(1)).notifyPaymentSuccess(any());
+        assertThat(transaction.getStatus()).isEqualTo(2);
+        assertThat(transaction.getChannelTxnNo()).isEqualTo("TXN1");
+        assertThat(transaction.getNotifyCount()).isEqualTo(1);
+    }
+
+    @Test
+    void callbackShouldIgnoreOrderNotifyFailure() {
+        PaymentTransaction transaction = transaction(1);
+        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(transaction);
+        when(orderClient.notifyPaymentSuccess(any())).thenThrow(new RuntimeException("order down"));
+
+        org.assertj.core.api.Assertions.assertThatCode(() -> paymentService.handleCallback(
+                        "mock", new CallbackRequest("P001", "TXN1", new BigDecimal("100.00"), "SUCCESS")))
+                .doesNotThrowAnyException();
+        assertThat(transaction.getStatus()).isEqualTo(2);
+        verify(transactionMapper).updateById(transaction);
+    }
+
+    // ---------- 退款 ----------
+
+    @Test
+    void refundShouldRejectUnknownPayment() {
+        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+
+        assertThatThrownBy(() ->
+                        paymentService.refund("NOPE", new RefundRequest(new BigDecimal("10.00"), 1)))
+                .isInstanceOf(BusinessException.class);
+        verify(transactionMapper, never()).updateById(any(PaymentTransaction.class));
+    }
+
+    @Test
+    void refundShouldRejectWhenNotPaid() {
+        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(transaction(1));
+
+        assertThatThrownBy(() ->
+                        paymentService.refund("P001", new RefundRequest(new BigDecimal("10.00"), 1)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("仅已支付订单可退款");
+        verify(transactionMapper, never()).updateById(any(PaymentTransaction.class));
+    }
+
+    @Test
+    void refundShouldMarkRefunded() {
+        PaymentTransaction transaction = transaction(2);
+        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(transaction);
+
+        paymentService.refund("P001", new RefundRequest(new BigDecimal("10.00"), 1));
+
+        assertThat(transaction.getStatus()).isEqualTo(5);
+        verify(transactionMapper).updateById(transaction);
+    }
+
+    @Test
+    void refundShouldRejectAmountExceedingPayment() {
+        PaymentTransaction transaction = transaction(2);
+        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(transaction);
+
+        assertThatThrownBy(() ->
+                        paymentService.refund("P001", new RefundRequest(new BigDecimal("100.01"), 1)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("超过支付金额");
+        verify(transactionMapper, never()).updateById(any(PaymentTransaction.class));
     }
 
     private PaymentTransaction transaction(int status) {

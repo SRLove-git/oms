@@ -15,6 +15,10 @@ spring:
       server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
       username: ${NACOS_USERNAME:nacos}
       password: ${NACOS_PASSWORD:nacos}
+    sentinel:
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:127.0.0.1:8858}
+      eager: true
     gateway:
       server:
         webflux:
@@ -63,6 +67,67 @@ spring:
               uri: lb://after-sales-service
               predicates:
                 - Path=/api/v1/reports/aftersales/**
+            - id: open-order
+              uri: lb://order-service
+              predicates:
+                - Path=/api/v1/open/orders/**
+            - id: open-product
+              uri: lb://inventory-service
+              predicates:
+                - Path=/api/v1/open/products/**,/api/v1/open/skus/**
+            - id: user-service-docs
+              uri: lb://user-service
+              predicates:
+                - Path=/user-service/v3/api-docs
+              filters:
+                - RewritePath=/user-service/(?<segment>.*), /$\{segment}
+            - id: order-service-docs
+              uri: lb://order-service
+              predicates:
+                - Path=/order-service/v3/api-docs
+              filters:
+                - RewritePath=/order-service/(?<segment>.*), /$\{segment}
+            - id: inventory-service-docs
+              uri: lb://inventory-service
+              predicates:
+                - Path=/inventory-service/v3/api-docs
+              filters:
+                - RewritePath=/inventory-service/(?<segment>.*), /$\{segment}
+            - id: after-sales-service-docs
+              uri: lb://after-sales-service
+              predicates:
+                - Path=/after-sales-service/v3/api-docs
+              filters:
+                - RewritePath=/after-sales-service/(?<segment>.*), /$\{segment}
+            - id: payment-center-docs
+              uri: lb://payment-center
+              predicates:
+                - Path=/payment-center/v3/api-docs
+              filters:
+                - RewritePath=/payment-center/(?<segment>.*), /$\{segment}
+            - id: integration-service-docs
+              uri: lb://integration-service
+              predicates:
+                - Path=/integration-service/v3/api-docs
+              filters:
+                - RewritePath=/integration-service/(?<segment>.*), /$\{segment}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: user-service
+        url: /user-service/v3/api-docs
+      - name: order-service
+        url: /order-service/v3/api-docs
+      - name: inventory-service
+        url: /inventory-service/v3/api-docs
+      - name: after-sales-service
+        url: /after-sales-service/v3/api-docs
+      - name: payment-center
+        url: /payment-center/v3/api-docs
+      - name: integration-service
+        url: /integration-service/v3/api-docs
 
 management:
   endpoints:
@@ -80,3 +145,27 @@ logging:
 oms:
   security:
     jwt-secret: ${OMS_JWT_SECRET:oms-dev-jwt-secret-please-change-0123456789}
+  open-api:
+    enabled: true
+    timestamp-window-seconds: 300
+    clients:
+      demo-mall:
+        secret: ${OMS_OPEN_API_DEMO_MALL_SECRET:demo-mall-secret-change-me}
+        merchant-id: ${OMS_OPEN_API_DEMO_MALL_MERCHANT_ID:1}
+        enabled: true
+  sentinel:
+    enabled: true
+    flow-qps:
+      order-service: 300
+      payment-center: 300
+      payment-callback-api: 1000
+      inventory-service: 500
+      user-service: 200
+      after-sales-service: 200
+      integration-service: 200
+      order-report: 100
+      inventory-report: 100
+      payment-report: 100
+      aftersales-report: 100
+    degrade-rt-ms:
+      order-service: 1000

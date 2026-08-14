@@ -1,6 +1,7 @@
 package com.oms.order.service;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -84,6 +85,7 @@ class OrderServiceTest {
         Order order = order(OrderStatus.PENDING_PAYMENT);
         when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
         when(inventoryClient.deduct(any())).thenReturn(Result.ok());
+        when(orderMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
 
         orderService.handlePaymentSuccess(
                 new PaymentSuccessRequest("O001", "P001", "mock", new BigDecimal("100.00"), "TXN1"));

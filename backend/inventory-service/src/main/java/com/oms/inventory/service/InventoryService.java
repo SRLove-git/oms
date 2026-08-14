@@ -192,8 +192,34 @@ public class InventoryService {
                         .toList());
     }
 
-    public PageResult<TransactionResponse> pageTransactions(Long skuId, String bizNo, int page, int size) {
-        LambdaQueryWrapper<InventoryTransaction> wrapper = new LambdaQueryWrapper<InventoryTransaction>()
+    /**
+     * 可售库存：多批次 quantity 合计（预占已在 quantity 上扣减，reserved 仅作标记）。
+     */
+    public int availableStock(Long skuId) {
+        return inventoryMapper.selectList(new LambdaQueryWrapper<Inventory>()
+                        .eq(Inventory::getSkuId, skuId)
+                        .eq(Inventory::getDeleted, 0))
+                .stream()
+                .mapToInt(Inventory::getQuantity)
+                .sum();
+    }
+
+    /**
+     * 批量可售库存：商城开放 API 商品列表使用。
+     */
+    public Map<Long, Integer> availableStocks(List<Long> skuIds) {
+        if (skuIds == null || skuIds.isEmpty()) {
+            return Map.of();
+        }
+        return inventoryMapper.selectList(new LambdaQueryWrapper<Inventory>()
+                        .in(Inventory::getSkuId, skuIds)
+                        .eq(Inventory::getDeleted, 0))
+                .stream()
+                .collect(Collectors.groupingBy(
+                        Inventory::getSkuId, Collectors.summingInt(Inventory::getQuantity)));
+    }
+
+    public PageResult<TransactionResponse> pageTransactions(Long skuId, String bizNo, int page, int size) {        LambdaQueryWrapper<InventoryTransaction> wrapper = new LambdaQueryWrapper<InventoryTransaction>()
                 .orderByDesc(InventoryTransaction::getId);
         if (skuId != null) {
             wrapper.eq(InventoryTransaction::getSkuId, skuId);

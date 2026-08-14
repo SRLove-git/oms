@@ -1,6 +1,9 @@
 package com.oms.payment.service;
 
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oms.common.core.exception.BusinessException;
@@ -57,22 +60,29 @@ public class PaymentService {
                 .collect(Collectors.toMap(PaymentAdapter::channel, Function.identity()));
     }
 
+    @SentinelResource(value = "payment.create", blockHandler = "createBlocked")
     @Transactional
     public CreatePaymentResponse create(CreatePaymentRequest request) {
-        if (mockOnly && !"mock".equalsIgnoreCase(request.channel())) {
+        String channel = request.channel() == null ? "mock" : request.channel();
+        if (mockOnly && !"mock".equalsIgnoreCase(channel)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "当前为模拟支付模式，仅支持 mock 渠道");
         }
-        PaymentAdapter adapter = adapters.get(request.channel() == null ? "mock" : request.channel());
+        PaymentAdapter adapter = adapters.get(channel);
         if (adapter == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "暂不支持该支付渠道");
         }
 
-        PaymentTransaction existing = transactionMapper.selectOne(new LambdaQueryWrapper<PaymentTransaction>()
-                .eq(PaymentTransaction::getOrderNo, request.orderNo())
-                .eq(PaymentTransaction::getStatus, 1)
-                .eq(PaymentTransaction::getDeleted, 0)
+        // 幂等查询使用普通 QueryWrapper（字符串列名）：LambdaQueryWrapper 依赖
+        // MyBatis-Plus 的 lambda 缓存初始化，无法在纯单元测试环境使用
+        PaymentTransaction existing = transactionMapper.selectOne(new QueryWrapper<PaymentTransaction>()
+                .eq("order_no", request.orderNo())
+                .in("status", 1, 2)
+                .eq("deleted", 0)
                 .last("LIMIT 1"));
         if (existing != null) {
+            if (existing.getStatus() != null && existing.getStatus() == 2) {
+                throw new BusinessException(ErrorCode.CONFLICT.getCode(), "订单已支付，不能重复创建支付单");
+            }
             return new CreatePaymentResponse(
                     existing.getPaymentNo(), existing.getChannel(), buildPayUrl(existing), existing.getAmount());
         }
@@ -90,6 +100,7 @@ public class PaymentService {
         return adapter.createPayment(request, transaction);
     }
 
+    @SentinelResource(value = "payment.handleCallback", blockHandler = "handleCallbackBlocked")
     @Transactional
     public void handleCallback(String channel, CallbackRequest request) {
         PaymentTransaction transaction = transactionMapper.selectOne(new LambdaQueryWrapper<PaymentTransaction>()
@@ -135,6 +146,17 @@ public class PaymentService {
         }
     }
 
+    public CreatePaymentResponse createBlocked(CreatePaymentRequest request, BlockException ex) {
+        throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE.getCode(), "支付请求流量过大，请稍后重试");
+    }
+
+    /**
+     * 渠道回调限流兜底：丢弃并记录，渠道侧按重试策略再次回调。
+     */
+    public void handleCallbackBlocked(String channel, CallbackRequest request, BlockException ex) {
+        log.warn("支付回调被限流丢弃 channel={} paymentNo={}", channel, request.paymentNo());
+    }
+
     @Transactional
     public void refund(String paymentNo, RefundRequest request) {
         PaymentTransaction transaction = transactionMapper.selectOne(new LambdaQueryWrapper<PaymentTransaction>()
@@ -146,6 +168,11 @@ public class PaymentService {
         }
         if (transaction.getStatus() != 2) {
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), "仅已支付订单可退款");
+        }
+        if (request.amount() != null
+                && transaction.getAmount() != null
+                && request.amount().compareTo(transaction.getAmount()) > 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "退款金额超过支付金额");
         }
         transaction.setStatus(5);
         transactionMapper.updateById(transaction);

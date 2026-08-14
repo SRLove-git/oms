@@ -31,6 +31,10 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             "/api/v1/auth/login",
             "/api/v1/merchants/register",
             "/api/v1/payment-callbacks/",
+            "/api/v1/open/",
+            "/v3/api-docs",
+            "/swagger-ui",
+            "/webjars/",
             "/actuator");
 
     private final ObjectMapper objectMapper = new ObjectMapper();

@@ -139,4 +139,14 @@ public class OrderArchiveService {
                                 logItem.getCreatedAt()))
                         .toList());
     }
+
+    /**
+     * 按外部订单号（商城开放 API 幂等键）查询归档订单，未命中返回 null。
+     */
+    public OrderArchive findByExternalOrderNo(String externalOrderNo) {
+        return archiveMapper.selectOne(new LambdaQueryWrapper<OrderArchive>()
+                .eq(OrderArchive::getExternalOrderNo, externalOrderNo)
+                .eq(OrderArchive::getDeleted, 0)
+                .last("LIMIT 1"));
+    }
 }

@@ -1,7 +1,10 @@
 package com.oms.order.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.oms.common.core.exception.BusinessException;
 import com.oms.common.core.result.ErrorCode;
 import com.oms.common.core.result.PageResult;
@@ -19,7 +22,10 @@ import com.oms.order.dto.OrderDtos.OrderSummaryResponse;
 import com.oms.order.dto.OrderDtos.PayRequest;
 import com.oms.order.dto.OrderDtos.PaymentSuccessRequest;
 import com.oms.order.dto.OrderDtos.ShipRequest;
+import com.oms.order.dto.OpenOrderDtos.OpenCreateOrderRequest;
+import com.oms.order.dto.OpenOrderDtos.OpenOrderResponse;
 import com.oms.order.entity.Order;
+import com.oms.order.entity.OrderArchive;
 import com.oms.order.entity.OrderItem;
 import com.oms.order.entity.OrderLog;
 import com.oms.order.entity.OrderPayment;
@@ -37,6 +43,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -73,6 +80,7 @@ public class OrderService {
         this.orderArchiveService = orderArchiveService;
     }
 
+    @SentinelResource(value = "order.create", blockHandler = "createBlocked")
     @Transactional
     public OrderResponse create(CreateOrderRequest request, Long operatorId, String operatorName) {
         if (request.items() == null || request.items().isEmpty()) {
@@ -90,7 +98,20 @@ public class OrderService {
         String orderNo = generateOrderNo();
         InventoryClient.StockRequest stockRequest =
                 new InventoryClient.StockRequest(orderNo, request.items());
-        ensureSuccess(inventoryClient.reserve(stockRequest), "库存预占");
+        try {
+            ensureSuccess(inventoryClient.reserve(stockRequest), "库存预占");
+        } catch (BusinessException ex) {
+            // 业务失败（如库存不足）：明确未预占，无需释放
+            throw ex;
+        } catch (RuntimeException ex) {
+            // 远程异常：预占结果未知，尝试释放避免库存泄漏
+            try {
+                inventoryClient.release(stockRequest);
+            } catch (Exception releaseEx) {
+                log.error("预占异常后释放失败 orderNo={}", orderNo, releaseEx);
+            }
+            throw ex;
+        }
 
         try {
             return persistOrder(request, skus, orderNo, operatorId, operatorName);
@@ -102,6 +123,87 @@ public class OrderService {
             }
             throw ex;
         }
+    }
+
+    /**
+     * 商城开放 API 下单：以 {@code externalOrderNo} 作为幂等键，重复提交返回已存在的订单。
+     */
+    @Transactional
+    public OpenOrderResponse createOpen(OpenCreateOrderRequest request, Long merchantId) {
+        if (request.externalOrderNo() == null || request.externalOrderNo().isBlank()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "externalOrderNo 不能为空");
+        }
+        Order existing = findByExternalOrderNo(request.externalOrderNo());
+        if (existing != null) {
+            requireMerchant(existing.getMerchantId(), merchantId);
+            return toOpenResponse(existing, loadItems(existing.getId()));
+        }
+
+        OrderResponse created = create(
+                new CreateOrderRequest(merchantId, request.orderType(), request.remark(), request.items()),
+                null, "OPEN_API");
+        Order order = findOrder(created.orderNo());
+        order.setExternalOrderNo(request.externalOrderNo());
+        order.setSource("OPEN_API");
+        try {
+            orderMapper.updateById(order);
+        } catch (DuplicateKeyException ex) {
+            // 并发重复提交：回滚本次新建订单（释放库存），返回已存在的幂等订单
+            try {
+                cancel(created.orderNo(), new CancelRequest("外部订单号重复"), null, "OPEN_API", 1);
+            } catch (Exception rollbackEx) {
+                log.error("外部订单号冲突回滚失败 orderNo={}", created.orderNo(), rollbackEx);
+            }
+            Order duplicated = findByExternalOrderNo(request.externalOrderNo());
+            if (duplicated != null) {
+                requireMerchant(duplicated.getMerchantId(), merchantId);
+                return toOpenResponse(duplicated, loadItems(duplicated.getId()));
+            }
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "外部订单号冲突");
+        }
+        return toOpenResponse(order, loadItems(order.getId()));
+    }
+
+    /**
+     * 商城开放 API 查单：热表优先，热表未命中回落到归档表。
+     */
+    public OpenOrderResponse getOpen(String externalOrderNo, Long merchantId) {
+        Order order = findByExternalOrderNo(externalOrderNo);
+        if (order != null) {
+            requireMerchant(order.getMerchantId(), merchantId);
+            return toOpenResponse(order, loadItems(order.getId()));
+        }
+        OrderArchive archived = orderArchiveService.findByExternalOrderNo(externalOrderNo);
+        if (archived != null) {
+            requireMerchant(archived.getMerchantId(), merchantId);
+            OrderResponse detail = orderArchiveService.getByOrderNo(archived.getOrderNo());
+            return new OpenOrderResponse(
+                    detail.orderNo(),
+                    archived.getExternalOrderNo(),
+                    archived.getSource(),
+                    archived.getOrderType(),
+                    detail.status(),
+                    detail.totalAmount(),
+                    detail.currency(),
+                    detail.remark(),
+                    detail.paidAt(),
+                    detail.createdAt(),
+                    detail.items());
+        }
+        throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "外部订单不存在");
+    }
+
+    /**
+     * 商城开放 API 取消：仅待支付订单可取消，取消后自动释放库存。
+     */
+    @Transactional
+    public void cancelOpen(String externalOrderNo, Long merchantId) {
+        Order order = findByExternalOrderNo(externalOrderNo);
+        if (order == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "外部订单不存在");
+        }
+        requireMerchant(order.getMerchantId(), merchantId);
+        cancel(order.getOrderNo(), new CancelRequest("商城取消"), null, "OPEN_API", null);
     }
 
     private OrderResponse persistOrder(
@@ -157,6 +259,11 @@ public class OrderService {
         }
     }
 
+    private <T> T ensureSuccessData(Result<T> result, String action) {
+        ensureSuccess(result, action);
+        return result.data();
+    }
+
     public OrderResponse get(String orderNo) {
         Order order = findOrderOrNull(orderNo);
         if (order == null) {
@@ -207,16 +314,35 @@ public class OrderService {
         int from = order.getStatus();
         boolean admin = userType != null && userType == 1;
         if (from == OrderStatus.PENDING_PAYMENT) {
-            transit(order, OrderStatus.CANCELLED, operatorId, operatorName, "取消订单");
+            cancelWithCondition(order, from, operatorId, operatorName, "取消订单");
             inventoryClient.release(itemsAsStockRequest(orderNo, order.getId()));
         } else if (from == OrderStatus.PAID && admin) {
-            transit(order, OrderStatus.CANCELLED, operatorId, operatorName, "管理员取消已支付订单");
+            cancelWithCondition(order, from, operatorId, operatorName, "管理员取消已支付订单");
             inventoryClient.restore(itemsAsStockRequest(orderNo, order.getId()));
         } else {
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), "当前状态不允许取消");
         }
     }
 
+    /**
+     * 条件取消：仅当订单仍处于 {@code from} 状态时流转为已取消，
+     * 防止并发支付回调将订单置为已支付后被取消覆盖。
+     */
+    private void cancelWithCondition(
+            Order order, int from, Long operatorId, String operatorName, String remark) {
+        if (!transitIfStatus(order.getId(), from, OrderStatus.CANCELLED)) {
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "订单状态已变化，请刷新后重试");
+        }
+        order.setStatus(OrderStatus.CANCELLED);
+        appendLog(order.getId(), from, OrderStatus.CANCELLED, operatorId, operatorName, remark);
+    }
+
+    public OrderResponse createBlocked(
+            CreateOrderRequest request, Long operatorId, String operatorName, BlockException ex) {
+        throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE.getCode(), "下单流量过大，请稍后重试");
+    }
+
+    @SentinelResource(value = "order.pay", blockHandler = "payBlocked")
     @Transactional
     public PaymentClient.CreatePaymentResponse pay(String orderNo, PayRequest request, Long operatorId) {
         Order order = findOrder(orderNo);
@@ -226,7 +352,11 @@ public class OrderService {
         String channel = request.channel() == null ? "mock" : request.channel();
         PaymentClient.CreatePaymentRequest paymentRequest = new PaymentClient.CreatePaymentRequest(
                 orderNo, order.getPayAmount(), order.getCurrency(), channel, order.getMerchantId());
-        PaymentClient.CreatePaymentResponse response = paymentClient.create(paymentRequest).data();
+        PaymentClient.CreatePaymentResponse response =
+                ensureSuccessData(paymentClient.create(paymentRequest), "支付发起");
+        if (response == null || response.paymentNo() == null) {
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "支付发起失败: 远程响应为空");
+        }
 
         Long exists = orderPaymentMapper.selectCount(new LambdaQueryWrapper<OrderPayment>()
                 .eq(OrderPayment::getPaymentNo, response.paymentNo()));
@@ -279,6 +409,12 @@ public class OrderService {
         transit(order, OrderStatus.COMPLETED, operatorId, operatorName, "售后处理完成");
     }
 
+    public PaymentClient.CreatePaymentResponse payBlocked(
+            String orderNo, PayRequest request, Long operatorId, BlockException ex) {
+        throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE.getCode(), "支付请求流量过大，请稍后重试");
+    }
+
+    @SentinelResource(value = "order.handlePaymentSuccess", blockHandler = "handlePaymentSuccessBlocked")
     @Transactional
     public void handlePaymentSuccess(PaymentSuccessRequest request) {
         Order order = findOrder(request.orderNo());
@@ -286,9 +422,23 @@ public class OrderService {
             log.info("支付回调重复或状态异常，忽略 orderNo={} status={}", request.orderNo(), order.getStatus());
             return;
         }
-        transit(order, OrderStatus.PAID, null, "PAYMENT", "支付成功");
-        order.setPaidAt(LocalDateTime.now());
-        orderMapper.updateById(order);
+        // 金额校验：回调金额与应付金额不一致时忽略并告警，进入人工核对
+        if (request.amount() != null
+                && order.getPayAmount() != null
+                && request.amount().compareTo(order.getPayAmount()) != 0) {
+            log.error("支付金额不一致，忽略回调 orderNo={} expect={} actual={}",
+                    request.orderNo(), order.getPayAmount(), request.amount());
+            return;
+        }
+        // 条件流转：仅待支付订单可置为已支付，防止超时取消/重复回调并发覆盖
+        LocalDateTime paidAt = LocalDateTime.now();
+        if (!transitIfStatus(order.getId(), OrderStatus.PENDING_PAYMENT, OrderStatus.PAID, paidAt)) {
+            log.info("支付回调状态已变化，忽略 orderNo={}", request.orderNo());
+            return;
+        }
+        order.setStatus(OrderStatus.PAID);
+        order.setPaidAt(paidAt);
+        appendLog(order.getId(), OrderStatus.PENDING_PAYMENT, OrderStatus.PAID, null, "PAYMENT", "支付成功");
 
         OrderPayment payment = orderPaymentMapper.selectOne(new LambdaQueryWrapper<OrderPayment>()
                 .eq(OrderPayment::getPaymentNo, request.paymentNo())
@@ -307,6 +457,13 @@ public class OrderService {
         }
     }
 
+    /**
+     * 支付回调限流兜底：直接丢弃并记录，渠道侧会按重试策略再次回调。
+     */
+    public void handlePaymentSuccessBlocked(PaymentSuccessRequest request, BlockException ex) {
+        log.warn("支付回调被限流丢弃 orderNo={}", request.orderNo());
+    }
+
     public void timeoutCancelPendingOrders() {
         List<Order> expired = orderMapper.selectList(new LambdaQueryWrapper<Order>()
                 .eq(Order::getStatus, OrderStatus.PENDING_PAYMENT)
@@ -315,7 +472,14 @@ public class OrderService {
                 .last("LIMIT 50"));
         for (Order order : expired) {
             try {
-                transit(order, OrderStatus.CANCELLED, null, "SYSTEM", "超时未支付自动取消");
+                // 条件流转：查询与更新之间若已被支付回调置为已支付，则跳过并保留库存
+                if (!transitIfStatus(order.getId(), OrderStatus.PENDING_PAYMENT, OrderStatus.CANCELLED)) {
+                    log.info("超时取消跳过（订单状态已变化） orderNo={}", order.getOrderNo());
+                    continue;
+                }
+                order.setStatus(OrderStatus.CANCELLED);
+                appendLog(order.getId(), OrderStatus.PENDING_PAYMENT, OrderStatus.CANCELLED,
+                        null, "SYSTEM", "超时未支付自动取消");
                 inventoryClient.release(itemsAsStockRequest(order.getOrderNo(), order.getId()));
                 log.info("超时订单已取消并释放库存 orderNo={}", order.getOrderNo());
             } catch (Exception ex) {
@@ -346,6 +510,30 @@ public class OrderService {
         order.setStatus(toStatus);
         orderMapper.updateById(order);
         appendLog(order.getId(), from, toStatus, operatorId, operatorName, remark);
+    }
+
+    /**
+     * 条件状态流转：仅当订单仍处于 {@code fromStatus} 时更新为目标状态（乐观并发控制）。
+     *
+     * <p>使用普通 UpdateWrapper（字符串列名）而非 LambdaUpdateWrapper：
+     * 后者依赖 MyBatis-Plus 的 lambda 缓存初始化，无法在纯单元测试环境使用。
+     */
+    private boolean transitIfStatus(Long orderId, int fromStatus, int toStatus) {
+        return orderMapper.update(null, new UpdateWrapper<Order>()
+                .eq("id", orderId)
+                .eq("status", fromStatus)
+                .set("status", toStatus)) > 0;
+    }
+
+    /**
+     * 条件状态流转（带支付时间）：支付成功回调专用。
+     */
+    private boolean transitIfStatus(Long orderId, int fromStatus, int toStatus, LocalDateTime paidAt) {
+        return orderMapper.update(null, new UpdateWrapper<Order>()
+                .eq("id", orderId)
+                .eq("status", fromStatus)
+                .set("status", toStatus)
+                .set("paid_at", paidAt)) > 0;
     }
 
     private void appendLog(
@@ -379,6 +567,49 @@ public class OrderService {
                 .eq(Order::getDeleted, 0)
                 .last("LIMIT 1"));
         return order;
+    }
+
+    private Order findByExternalOrderNo(String externalOrderNo) {
+        return orderMapper.selectOne(new LambdaQueryWrapper<Order>()
+                .eq(Order::getExternalOrderNo, externalOrderNo)
+                .eq(Order::getDeleted, 0)
+                .last("LIMIT 1"));
+    }
+
+    private List<OrderItem> loadItems(Long orderId) {
+        return orderItemMapper.selectList(new LambdaQueryWrapper<OrderItem>()
+                .eq(OrderItem::getOrderId, orderId)
+                .eq(OrderItem::getDeleted, 0)
+                .orderByAsc(OrderItem::getId));
+    }
+
+    private void requireMerchant(Long ownerMerchantId, Long merchantId) {
+        if (merchantId == null || !merchantId.equals(ownerMerchantId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+    }
+
+    private OpenOrderResponse toOpenResponse(Order order, List<OrderItem> items) {
+        return new OpenOrderResponse(
+                order.getOrderNo(),
+                order.getExternalOrderNo(),
+                order.getSource(),
+                order.getOrderType(),
+                order.getStatus(),
+                order.getTotalAmount(),
+                order.getCurrency(),
+                order.getRemark(),
+                order.getPaidAt(),
+                order.getCreatedAt(),
+                items.stream()
+                        .map(item -> new OrderItemResponse(
+                                item.getId(),
+                                item.getSkuId(),
+                                item.getSkuName(),
+                                item.getQuantity(),
+                                item.getUnitPrice(),
+                                item.getTotalPrice()))
+                        .toList());
     }
 
     private String generateOrderNo() {

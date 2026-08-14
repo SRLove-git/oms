@@ -118,6 +118,26 @@ mvn -pl oms-gateway,user-service,order-service,inventory-service,after-sales-ser
 - Nacos 配置中心使用 `spring.config.import`（`optional:nacos:...`），Nacos 不可用时服务仍可本地启动。
 - 数据库迁移由 Flyway 管理，脚本位于各服务 `src/main/resources/db/migration/`，禁止手工改库。
 
+## OpenAPI 文档与流控
+
+- **OpenAPI（springdoc）**：各服务 `/v3/api-docs` + Swagger UI `/swagger-ui.html`；网关聚合入口 `http://localhost:8080/swagger-ui.html`（聚合 user/order/inventory/after-sales/payment/integration 六个服务，无需认证）。
+- **Sentinel 流控**：网关按路由与 API 分组限流（下单 300 QPS、支付回调 1000 QPS 等），订单/支付服务在核心方法上以 `@SentinelResource` 限流与 RT 降级；阈值见各服务 `application.yml` 的 `oms.sentinel.*`，可连接 Sentinel 控制台（`SENTINEL_DASHBOARD`，默认 127.0.0.1:8858）动态调整。
+
+## 商城对接开放 API
+
+外部商城/分销平台通过 `/api/v1/open/**` 对接 OMS（HMAC-SHA256 签名 + 时间戳窗口 + nonce 防重放，appId 映射商户）：
+
+| 方法 | 路径 | 说明 |
+| :--- | :--- | :--- |
+| GET | `/api/v1/open/products` | 在售商品分页（含实时可售库存） |
+| GET | `/api/v1/open/products/{skuId}` | 商品详情 + 库存 |
+| GET | `/api/v1/open/skus/{skuId}/stock` | 实时库存 |
+| POST | `/api/v1/open/orders` | 下单（以 `externalOrderNo` 幂等） |
+| GET | `/api/v1/open/orders/{externalOrderNo}` | 按外部订单号查单（自动回落归档表） |
+| POST | `/api/v1/open/orders/{externalOrderNo}/cancel` | 取消待支付订单（释放库存） |
+
+签名方案、客户端配置与冒烟脚本见 `docs/open-api.md` 与 `scripts/open-api-smoke.sh`。
+
 ## 约定
 
 - 包结构：`controller / service / mapper / entity / dto / constant`
