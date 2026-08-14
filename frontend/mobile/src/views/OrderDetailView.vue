@@ -37,9 +37,7 @@
         <div v-for="item in order.items" :key="item.id" class="order-item">
           <div class="order-item-main">
             <div class="order-item-name">{{ item.skuName }}</div>
-            <div class="text-muted">
-              ¥{{ formatPrice(item.unitPrice) }} × {{ item.quantity }}
-            </div>
+            <div class="text-muted">¥{{ formatPrice(item.unitPrice) }} × {{ item.quantity }}</div>
           </div>
           <div class="text-price">¥{{ formatPrice(item.totalPrice) }}</div>
         </div>

@@ -32,13 +32,7 @@
             size="large"
           />
         </a-form-item>
-        <a-button
-          class="app-primary-btn"
-          type="primary"
-          html-type="submit"
-          long
-          :loading="loading"
-        >
+        <a-button class="app-primary-btn" type="primary" html-type="submit" long :loading="loading">
           {{ t('login.loginBtn') }}
         </a-button>
       </a-form>

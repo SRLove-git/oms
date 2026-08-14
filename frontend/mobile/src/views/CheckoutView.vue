@@ -70,7 +70,7 @@
   >
     <div>{{ t('payment.content', { paymentNo: payInfo?.paymentNo ?? '-' }) }}</div>
     <div class="mt-8">
-      {{ t('payment.amount') }}：<span class="text-price">¥{{ payInfo ? formatPrice(payInfo.amount) : '-' }}</span>
+      {{ t('payment.amount') }}：<span class="text-price">¥{{ payAmountText }}</span>
     </div>
   </a-modal>
 </template>
@@ -103,6 +103,8 @@ const createdOrder = ref<OrderDetail | null>(null)
 
 const payVisible = ref(false)
 const payInfo = ref<{ paymentNo: string; amount: string } | null>(null)
+
+const payAmountText = computed(() => (payInfo.value ? formatPrice(payInfo.value.amount) : '-'))
 
 const totalAmount = computed(() => {
   if (!sku.value) {

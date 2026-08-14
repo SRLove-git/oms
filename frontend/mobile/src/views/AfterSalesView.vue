@@ -35,7 +35,10 @@
           <span>{{ t('aftersales.applyTime') }}</span>
           <span>{{ item.createdAt }}</span>
         </div>
-        <div v-if="item.status === 1 || item.status === 2 || item.status === 4" class="app-list-item-actions">
+        <div
+          v-if="item.status === 1 || item.status === 2 || item.status === 4"
+          class="app-list-item-actions"
+        >
           <a-button status="danger" size="small" @click="handleCancel(item)">
             {{ t('aftersales.cancelApply') }}
           </a-button>

@@ -14,12 +14,7 @@
     <div v-else-if="list.length === 0" class="app-empty">{{ t('home.empty') }}</div>
 
     <div v-else class="sku-grid">
-      <div
-        v-for="sku in list"
-        :key="sku.id"
-        class="sku-card"
-        @click="goDetail(sku.id)"
-      >
+      <div v-for="sku in list" :key="sku.id" class="sku-card" @click="goDetail(sku.id)">
         <div class="sku-card-body">
           <div class="sku-card-name">{{ sku.name }}</div>
           <div class="sku-card-spec">{{ sku.spec || sku.skuNo }}</div>
@@ -38,11 +33,7 @@
     </div>
 
     <div class="text-center mt-12">
-      <a-button
-        v-if="list.length > 0 && list.length < total"
-        :loading="loading"
-        @click="loadMore"
-      >
+      <a-button v-if="list.length > 0 && list.length < total" :loading="loading" @click="loadMore">
         {{ t('common.loadMore') }}
       </a-button>
       <span v-else-if="list.length > 0" class="text-muted">{{ t('common.noMore') }}</span>

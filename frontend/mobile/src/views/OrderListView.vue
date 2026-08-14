@@ -34,14 +34,33 @@
           <span>{{ t('orders.createdAt') }}</span>
           <span>{{ order.createdAt ?? '-' }}</span>
         </div>
-        <div v-if="order.status === 1 || order.status === 4" class="app-list-item-actions" @click.stop>
-          <a-button v-if="order.status === 1" type="primary" size="small" @click="openPay(order.orderNo)">
+        <div
+          v-if="order.status === 1 || order.status === 4"
+          class="app-list-item-actions"
+          @click.stop
+        >
+          <a-button
+            v-if="order.status === 1"
+            type="primary"
+            size="small"
+            @click="openPay(order.orderNo)"
+          >
             {{ t('orders.pay') }}
           </a-button>
-          <a-button v-if="order.status === 1" status="danger" size="small" @click="handleCancel(order)">
+          <a-button
+            v-if="order.status === 1"
+            status="danger"
+            size="small"
+            @click="handleCancel(order)"
+          >
             {{ t('orders.cancel') }}
           </a-button>
-          <a-button v-if="order.status === 4" type="primary" size="small" @click="handleSign(order.orderNo)">
+          <a-button
+            v-if="order.status === 4"
+            type="primary"
+            size="small"
+            @click="handleSign(order.orderNo)"
+          >
             {{ t('orders.sign') }}
           </a-button>
         </div>

@@ -19,7 +19,11 @@
       <div class="app-cell">
         <span class="app-cell-label">{{ t('profile.userType') }}</span>
         <span class="app-cell-value">
-          {{ userStore.user?.userType === 1 ? t('profile.userTypeAdmin') : t('profile.userTypeMerchant') }}
+          {{
+            userStore.user?.userType === 1
+              ? t('profile.userTypeAdmin')
+              : t('profile.userTypeMerchant')
+          }}
         </span>
       </div>
       <div class="app-cell">

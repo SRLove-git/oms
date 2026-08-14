@@ -111,7 +111,11 @@ onMounted(load)
           { label: t('home.stockSkuCount'), value: stockSummary.skuCount },
           { label: t('home.refundAmount'), value: Number(summary?.refundAmount ?? 0) },
           { label: t('home.returnRate'), value: Number(returnRate.rate) },
-        ]" :key="stat.label" :xs="24" :sm="12" :lg="6"
+        ]"
+        :key="stat.label"
+        :xs="24"
+        :sm="12"
+        :lg="6"
       >
         <a-card :bordered="false">
           <a-statistic :title="stat.label" :value="stat.value" />

@@ -50,12 +50,7 @@
       </div>
 
       <div class="app-fixed-footer">
-        <a-button
-          class="app-primary-btn"
-          type="primary"
-          long
-          @click="buyNow"
-        >
+        <a-button class="app-primary-btn" type="primary" long @click="buyNow">
           {{ t('skuDetail.buyNow') }}
         </a-button>
       </div>

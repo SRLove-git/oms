@@ -38,13 +38,16 @@ export default function AfterSalesPage() {
   const [applyReason, setApplyReason] = useState('')
   const [orderNo, setOrderNo] = useState('')
   const [orderItems, setOrderItems] = useState<OrderItemRecord[]>([])
-  const [selectedItems, setSelectedItems] = useState<Array<{ orderItemId: number; skuId: number; quantity: number }>>([])
+  const [selectedItems, setSelectedItems] = useState<
+    Array<{ orderItemId: number; skuId: number; quantity: number }>
+  >([])
   const [submitting, setSubmitting] = useState(false)
 
   const merchantId = userStore.user?.merchantId
 
   const typeName = (type: number) => t(`aftersales.type${type}`, { defaultValue: `#${type}` })
-  const statusName = (status: number) => t(`aftersales.status${status}`, { defaultValue: `#${status}` })
+  const statusName = (status: number) =>
+    t(`aftersales.status${status}`, { defaultValue: `#${status}` })
 
   async function load() {
     setLoading(true)

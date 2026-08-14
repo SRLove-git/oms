@@ -35,10 +35,7 @@ export default function BasicLayout() {
     <Layout className="basic-layout">
       <Sider className="basic-sider" collapsed={collapsed} collapsible width={220}>
         <div className="logo">{collapsed ? 'OMS' : t('layout.portalName')}</div>
-        <Menu
-          selectedKeys={[window.location.pathname]}
-          onClickMenuItem={(key) => navigate(key)}
-        >
+        <Menu selectedKeys={[window.location.pathname]} onClickMenuItem={(key) => navigate(key)}>
           <MenuItem key="/">
             <IconHome />
             {t('layout.home')}

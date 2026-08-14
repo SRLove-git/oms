@@ -11,14 +11,7 @@ import {
 } from '@arco-design/web-react'
 import { useTranslation } from 'react-i18next'
 
-import {
-  callbackMock,
-  cancelOrder,
-  getOrder,
-  pageOrders,
-  payOrder,
-  signOrder,
-} from '@/api/orders'
+import { callbackMock, cancelOrder, getOrder, pageOrders, payOrder, signOrder } from '@/api/orders'
 import type { OrderDetail, OrderSummary } from '@/api/orders'
 
 export default function OrdersPage() {
@@ -128,10 +121,19 @@ export default function OrdersPage() {
                 </Button>
                 {record.status === 1 && (
                   <>
-                    <Button size="mini" type="primary" loading={paying === record.orderNo} onClick={() => handlePay(record.orderNo)}>
+                    <Button
+                      size="mini"
+                      type="primary"
+                      loading={paying === record.orderNo}
+                      onClick={() => handlePay(record.orderNo)}
+                    >
                       {t('orders.pay')}
                     </Button>
-                    <Button size="mini" status="danger" onClick={() => handleCancel(record.orderNo)}>
+                    <Button
+                      size="mini"
+                      status="danger"
+                      onClick={() => handleCancel(record.orderNo)}
+                    >
                       {t('orders.cancel')}
                     </Button>
                   </>
