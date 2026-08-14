@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, Card, Form, Input, Message } from '@arco-design/web-react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import { login } from '@/api/auth'
@@ -9,6 +10,7 @@ const FormItem = Form.Item
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [form] = Form.useForm()
 
@@ -21,7 +23,7 @@ export default function LoginPage() {
     try {
       const result = await login(values.username, values.password)
       userStore.save(result.token, result.user)
-      Message.success('登录成功')
+      Message.success(t('login.success'))
       navigate('/')
     } finally {
       setLoading(false)
@@ -30,7 +32,7 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
-      <Card className="login-card" title="商家门户登录">
+      <Card className="login-card" title={t('login.title')}>
         <Form
           form={form}
           layout="vertical"
@@ -38,21 +40,21 @@ export default function LoginPage() {
           onSubmit={handleLogin}
         >
           <FormItem
-            label="账号"
+            label={t('login.username')}
             field="username"
-            rules={[{ required: true, message: '请输入账号' }]}
+            rules={[{ required: true, message: t('login.usernameRequired') }]}
           >
-            <Input placeholder="请输入账号" />
+            <Input placeholder={t('login.usernamePlaceholder')} />
           </FormItem>
           <FormItem
-            label="密码"
+            label={t('login.password')}
             field="password"
-            rules={[{ required: true, message: '请输入密码' }]}
+            rules={[{ required: true, message: t('login.passwordRequired') }]}
           >
-            <Input.Password placeholder="请输入密码" />
+            <Input.Password placeholder={t('login.passwordPlaceholder')} />
           </FormItem>
           <Button type="primary" htmlType="submit" long loading={loading}>
-            登 录
+            {t('login.submit')}
           </Button>
         </Form>
       </Card>

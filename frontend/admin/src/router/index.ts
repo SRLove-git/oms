@@ -3,6 +3,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import BasicLayout from '@/layouts/BasicLayout.vue'
 import { useUserStore } from '@/stores/user'
 
+import { updateDocumentTitle } from './title'
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -10,7 +12,7 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
-      meta: { title: '登录' },
+      meta: { title: 'login.title' },
     },
     {
       path: '/',
@@ -21,103 +23,103 @@ const router = createRouter({
           path: 'home',
           name: 'home',
           component: () => import('@/views/HomeView.vue'),
-          meta: { title: '首页' },
+          meta: { title: 'menu.home' },
         },
         {
           path: 'orders',
           name: 'orders',
           component: () => import('@/views/OrdersView.vue'),
-          meta: { title: '订单管理' },
+          meta: { title: 'menu.orders' },
         },
         {
           path: 'products',
           name: 'products',
           component: () => import('@/views/ProductsView.vue'),
-          meta: { title: '商品管理' },
+          meta: { title: 'menu.products' },
         },
         {
           path: 'inventories',
           name: 'inventories',
           component: () => import('@/views/InventoriesView.vue'),
-          meta: { title: '库存管理' },
+          meta: { title: 'menu.inventories' },
         },
         {
           path: 'payments',
           name: 'payments',
           component: () => import('@/views/PaymentsView.vue'),
-          meta: { title: '支付记录' },
+          meta: { title: 'menu.payments' },
         },
         {
           path: 'merchants',
           name: 'merchants',
           component: () => import('@/views/MerchantsView.vue'),
-          meta: { title: '商户管理' },
+          meta: { title: 'menu.merchants' },
         },
         {
           path: 'qualifications',
           name: 'qualifications',
           component: () => import('@/views/QualificationsView.vue'),
-          meta: { title: '资质管理' },
+          meta: { title: 'menu.qualifications' },
         },
         {
           path: 'users',
           name: 'users',
           component: () => import('@/views/UsersView.vue'),
-          meta: { title: '用户管理' },
+          meta: { title: 'menu.users' },
         },
         {
           path: 'audit-logs',
           name: 'audit-logs',
           component: () => import('@/views/AuditLogsView.vue'),
-          meta: { title: '审计日志' },
+          meta: { title: 'menu.auditLogs' },
         },
         {
           path: 'after-sales',
           name: 'after-sales',
           component: () => import('@/views/AfterSalesView.vue'),
-          meta: { title: '售后服务' },
+          meta: { title: 'menu.afterSales' },
         },
         {
           path: 'reconciliation',
           name: 'reconciliation',
           component: () => import('@/views/ReconciliationView.vue'),
-          meta: { title: '支付对账' },
+          meta: { title: 'menu.reconciliation' },
         },
         {
           path: 'logistics',
           name: 'logistics',
           component: () => import('@/views/LogisticsView.vue'),
-          meta: { title: '物流轨迹' },
+          meta: { title: 'menu.logistics' },
         },
         {
           path: 'notifications',
           name: 'notifications',
           component: () => import('@/views/NotificationsView.vue'),
-          meta: { title: '消息通知' },
+          meta: { title: 'menu.notifications' },
         },
         {
           path: 'reports/sales',
           name: 'reports-sales',
           component: () => import('@/views/SalesReportView.vue'),
-          meta: { title: '销售报表' },
+          meta: { title: 'menu.reportsSales' },
         },
         {
           path: 'reports/inventory',
           name: 'reports-inventory',
           component: () => import('@/views/InventoryReportView.vue'),
-          meta: { title: '库存报表' },
+          meta: { title: 'menu.reportsInventory' },
         },
         {
           path: 'reports/payments',
           name: 'reports-payments',
           component: () => import('@/views/PaymentReportView.vue'),
-          meta: { title: '支付报表' },
+          meta: { title: 'menu.reportsPayments' },
         },
         {
           path: 'reports/aftersales',
           name: 'reports-aftersales',
           component: () => import('@/views/AfterSalesReportView.vue'),
-          meta: { title: '售后报表' },
+          meta: { title: 'menu.reportsAftersales' },
         },
       ],
     },
@@ -129,6 +131,7 @@ router.beforeEach((to) => {
   if (!userStore.isLoggedIn && to.name !== 'login') {
     return { name: 'login' }
   }
+  updateDocumentTitle(to)
   return true
 })
 

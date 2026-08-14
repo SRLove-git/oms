@@ -9,6 +9,7 @@ import {
   Space,
   Table,
 } from '@arco-design/web-react'
+import { useTranslation } from 'react-i18next'
 
 import {
   callbackMock,
@@ -20,17 +21,8 @@ import {
 } from '@/api/orders'
 import type { OrderDetail, OrderSummary } from '@/api/orders'
 
-const STATUS_NAMES: Record<number, string> = {
-  1: '待支付',
-  2: '已支付',
-  3: '已审核',
-  4: '已发货',
-  5: '已签收',
-  6: '已完成',
-  7: '已取消',
-}
-
 export default function OrdersPage() {
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [list, setList] = useState<OrderSummary[]>([])
   const [total, setTotal] = useState(0)
@@ -41,6 +33,8 @@ export default function OrdersPage() {
   const [paying, setPaying] = useState<string | null>(null)
   const [payModalVisible, setPayModalVisible] = useState(false)
   const [payInfo, setPayInfo] = useState<{ paymentNo: string; amount: string } | null>(null)
+
+  const statusName = (status: number) => t(`orders.status${status}`, { defaultValue: `#${status}` })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -83,18 +77,18 @@ export default function OrdersPage() {
       amount: payInfo.amount,
       status: 'SUCCESS',
     })
-    Message.success('支付成功')
+    Message.success(t('orders.paySuccess'))
     setPayModalVisible(false)
     load()
   }
 
   function handleCancel(orderNo: string) {
     Modal.confirm({
-      title: '取消订单',
-      content: '确定取消该订单？将释放预占库存。',
+      title: t('orders.cancelTitle'),
+      content: t('orders.cancelContent'),
       onOk: async () => {
-        await cancelOrder(orderNo, '商户取消')
-        Message.success('已取消')
+        await cancelOrder(orderNo, t('orders.cancelReason'))
+        Message.success(t('common.cancelled'))
         load()
       },
     })
@@ -102,12 +96,12 @@ export default function OrdersPage() {
 
   async function handleSign(orderNo: string) {
     await signOrder(orderNo)
-    Message.success('已确认签收')
+    Message.success(t('orders.signSuccess'))
     load()
   }
 
   return (
-    <Card title="我的订单">
+    <Card title={t('orders.title')}>
       <Table
         rowKey="id"
         loading={loading}
@@ -115,36 +109,36 @@ export default function OrdersPage() {
         pagination={false}
         scroll={{ x: 900 }}
         columns={[
-          { title: '订单号', dataIndex: 'orderNo', width: 180 },
+          { title: t('orders.orderNo'), dataIndex: 'orderNo', width: 180 },
           {
-            title: '状态',
+            title: t('orders.status'),
             width: 90,
-            render: (_, record) => STATUS_NAMES[record.status],
+            render: (_, record) => statusName(record.status),
           },
-          { title: '金额', dataIndex: 'totalAmount', width: 110 },
-          { title: '商品数', dataIndex: 'itemCount', width: 90 },
-          { title: '创建时间', dataIndex: 'createdAt', width: 180 },
+          { title: t('orders.amount'), dataIndex: 'totalAmount', width: 110 },
+          { title: t('orders.itemCount'), dataIndex: 'itemCount', width: 90 },
+          { title: t('orders.createdAt'), dataIndex: 'createdAt', width: 180 },
           {
-            title: '操作',
+            title: t('orders.actions'),
             width: 280,
             render: (_, record) => (
               <Space>
                 <Button size="mini" onClick={() => showDetail(record.orderNo)}>
-                  详情
+                  {t('orders.detail')}
                 </Button>
                 {record.status === 1 && (
                   <>
                     <Button size="mini" type="primary" loading={paying === record.orderNo} onClick={() => handlePay(record.orderNo)}>
-                      去支付
+                      {t('orders.pay')}
                     </Button>
                     <Button size="mini" status="danger" onClick={() => handleCancel(record.orderNo)}>
-                      取消
+                      {t('orders.cancel')}
                     </Button>
                   </>
                 )}
                 {record.status === 4 && (
                   <Button size="mini" type="primary" onClick={() => handleSign(record.orderNo)}>
-                    确认签收
+                    {t('orders.confirmSign')}
                   </Button>
                 )}
               </Space>
@@ -163,7 +157,7 @@ export default function OrdersPage() {
 
       <Modal
         visible={detailVisible}
-        title="订单详情"
+        title={t('orders.detailTitle')}
         footer={null}
         style={{ width: 640 }}
         onCancel={() => setDetailVisible(false)}
@@ -173,10 +167,10 @@ export default function OrdersPage() {
             <Descriptions
               column={2}
               data={[
-                { label: '订单号', value: detail.orderNo },
-                { label: '状态', value: STATUS_NAMES[detail.status] },
-                { label: '应付金额', value: `${detail.payAmount} ${detail.currency}` },
-                { label: '创建时间', value: detail.createdAt ?? '-' },
+                { label: t('orders.orderNo'), value: detail.orderNo },
+                { label: t('orders.status'), value: statusName(detail.status) },
+                { label: t('orders.payAmount'), value: `${detail.payAmount} ${detail.currency}` },
+                { label: t('orders.createdAt'), value: detail.createdAt ?? '-' },
               ]}
             />
             <Table
@@ -185,11 +179,11 @@ export default function OrdersPage() {
               pagination={false}
               style={{ marginTop: 16 }}
               columns={[
-                { title: 'SKU', dataIndex: 'skuId', width: 80 },
-                { title: '商品', dataIndex: 'skuName' },
-                { title: '数量', dataIndex: 'quantity', width: 80 },
-                { title: '单价', dataIndex: 'unitPrice', width: 100 },
-                { title: '小计', dataIndex: 'totalPrice', width: 110 },
+                { title: t('orders.sku'), dataIndex: 'skuId', width: 80 },
+                { title: t('orders.product'), dataIndex: 'skuName' },
+                { title: t('orders.quantity'), dataIndex: 'quantity', width: 80 },
+                { title: t('orders.unitPrice'), dataIndex: 'unitPrice', width: 100 },
+                { title: t('orders.subtotal'), dataIndex: 'totalPrice', width: 110 },
               ]}
             />
           </>
@@ -198,14 +192,14 @@ export default function OrdersPage() {
 
       <Modal
         visible={payModalVisible}
-        title="模拟支付"
-        okText="模拟支付成功"
+        title={t('orders.simulatePay')}
+        okText={t('orders.simulatePayOk')}
         onCancel={() => setPayModalVisible(false)}
         onOk={simulatePay}
       >
-        支付单号：{payInfo?.paymentNo}
+        {t('orders.paymentNo')}：{payInfo?.paymentNo}
         <br />
-        支付金额：{payInfo?.amount} CNY
+        {t('orders.paymentAmount')}：{payInfo?.amount} CNY
       </Modal>
     </Card>
   )

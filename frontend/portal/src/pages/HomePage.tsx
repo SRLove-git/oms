@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Card, Grid, Statistic } from '@arco-design/web-react'
+import { useTranslation } from 'react-i18next'
 
 import { pageOrders } from '@/api/orders'
 import { pageSkus } from '@/api/skus'
@@ -8,8 +9,11 @@ import { userStore } from '@/stores/user'
 const { Row: GridRow, Col: GridCol } = Grid
 
 export default function HomePage() {
+  const { t } = useTranslation()
   const [orderTotal, setOrderTotal] = useState(0)
   const [skuTotal, setSkuTotal] = useState(0)
+
+  const displayName = userStore.user?.realName ?? userStore.user?.username ?? ''
 
   useEffect(() => {
     pageOrders({ page: 1, size: 1 }).then((res) => setOrderTotal(res.total))
@@ -18,18 +22,18 @@ export default function HomePage() {
 
   return (
     <div>
-      <Card title={`欢迎，${userStore.user?.realName ?? userStore.user?.username}`} style={{ marginBottom: 16 }}>
-        P0 核心交易链路已就绪：浏览商品 → 下单预占库存 → 模拟支付 → 审核发货 → 签收完成。
+      <Card title={t('home.welcome', { name: displayName })} style={{ marginBottom: 16 }}>
+        {t('home.desc')}
       </Card>
       <GridRow gutter={[16, 16]}>
         <GridCol xs={24} sm={12} lg={6}>
           <Card>
-            <Statistic title="我的订单" value={orderTotal} />
+            <Statistic title={t('home.myOrders')} value={orderTotal} />
           </Card>
         </GridCol>
         <GridCol xs={24} sm={12} lg={6}>
           <Card>
-            <Statistic title="在售商品" value={skuTotal} />
+            <Statistic title={t('home.onSaleProducts')} value={skuTotal} />
           </Card>
         </GridCol>
       </GridRow>

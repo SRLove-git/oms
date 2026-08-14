@@ -10,6 +10,7 @@ import {
   Table,
   Tag,
 } from '@arco-design/web-react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import { userStore } from '@/stores/user'
@@ -23,24 +24,9 @@ import { getOrder, type OrderItemRecord } from '@/api/orders'
 
 const FormItem = Form.Item
 
-const TYPE_NAMES: Record<number, string> = {
-  1: '退货',
-  2: '换货',
-  3: '维修',
-}
-
-const STATUS_NAMES: Record<number, string> = {
-  1: '待审核',
-  2: '已通过',
-  3: '已驳回',
-  4: '收货质检',
-  5: '退款中',
-  6: '已完成',
-  7: '已取消',
-}
-
 export default function AfterSalesPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [list, setList] = useState<ReturnOrderSummary[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -56,6 +42,9 @@ export default function AfterSalesPage() {
   const [submitting, setSubmitting] = useState(false)
 
   const merchantId = userStore.user?.merchantId
+
+  const typeName = (type: number) => t(`aftersales.type${type}`, { defaultValue: `#${type}` })
+  const statusName = (status: number) => t(`aftersales.status${status}`, { defaultValue: `#${status}` })
 
   async function load() {
     setLoading(true)
@@ -82,7 +71,7 @@ export default function AfterSalesPage() {
       const order = await getOrder(orderNo)
       setOrderItems(order.items)
       setSelectedItems([])
-      Message.success(`已加载订单 ${order.orderNo}，共 ${order.items.length} 个商品`)
+      Message.success(t('aftersales.loaded', { orderNo: order.orderNo, total: order.items.length }))
     } catch {
       setOrderItems([])
     }
@@ -90,7 +79,7 @@ export default function AfterSalesPage() {
 
   async function submitApply() {
     if (!orderNo || selectedItems.length === 0) {
-      Message.warning('请选择订单与售后商品')
+      Message.warning(t('aftersales.selectRequired'))
       return
     }
     setSubmitting(true)
@@ -101,7 +90,7 @@ export default function AfterSalesPage() {
         reason: applyReason,
         items: selectedItems,
       })
-      Message.success('售后申请已提交')
+      Message.success(t('aftersales.submitted'))
       setApplyVisible(false)
       load()
     } finally {
@@ -111,11 +100,11 @@ export default function AfterSalesPage() {
 
   function doCancel(row: ReturnOrderSummary) {
     Modal.confirm({
-      title: '取消售后单',
-      content: `确定取消售后单 ${row.returnNo}？`,
+      title: t('aftersales.cancelTitle'),
+      content: t('aftersales.cancelContent', { returnNo: row.returnNo }),
       onOk: async () => {
         await cancelReturnOrder(row.returnNo)
-        Message.success('已取消')
+        Message.success(t('common.cancelled'))
         load()
       },
     })
@@ -131,31 +120,31 @@ export default function AfterSalesPage() {
   }, [merchantId, page])
 
   const columns = [
-    { title: '售后单号', dataIndex: 'returnNo' },
-    { title: '订单号', dataIndex: 'orderNo' },
+    { title: t('aftersales.returnNo'), dataIndex: 'returnNo' },
+    { title: t('aftersales.orderNo'), dataIndex: 'orderNo' },
     {
-      title: '类型',
+      title: t('aftersales.type'),
       dataIndex: 'type',
-      render: (value: number) => TYPE_NAMES[value] ?? value,
+      render: (value: number) => typeName(value),
     },
     {
-      title: '状态',
+      title: t('aftersales.status'),
       dataIndex: 'status',
       render: (value: number) => (
         <Tag color={value === 6 ? 'green' : value === 3 || value === 7 ? 'red' : 'arcoblue'}>
-          {STATUS_NAMES[value] ?? value}
+          {statusName(value)}
         </Tag>
       ),
     },
-    { title: '金额', dataIndex: 'totalAmount' },
-    { title: '申请时间', dataIndex: 'createdAt' },
+    { title: t('aftersales.amount'), dataIndex: 'totalAmount' },
+    { title: t('aftersales.createdAt'), dataIndex: 'createdAt' },
     {
-      title: '操作',
+      title: t('aftersales.actions'),
       dataIndex: 'operations',
       render: (_: unknown, row: ReturnOrderSummary) =>
         row.status === 1 || row.status === 2 || row.status === 4 ? (
           <Button size="small" status="danger" onClick={() => doCancel(row)}>
-            取消申请
+            {t('aftersales.cancelApply')}
           </Button>
         ) : null,
     },
@@ -164,10 +153,10 @@ export default function AfterSalesPage() {
   return (
     <div>
       <Card
-        title="我的售后"
+        title={t('aftersales.title')}
         extra={
           <Button type="primary" onClick={openApply}>
-            申请售后
+            {t('aftersales.apply')}
           </Button>
         }
       >
@@ -186,7 +175,7 @@ export default function AfterSalesPage() {
       </Card>
 
       <Modal
-        title="申请售后"
+        title={t('aftersales.applyTitle')}
         visible={applyVisible}
         onCancel={() => setApplyVisible(false)}
         onOk={submitApply}
@@ -194,35 +183,35 @@ export default function AfterSalesPage() {
         style={{ width: 640 }}
       >
         <Form layout="vertical">
-          <FormItem label="订单号">
+          <FormItem label={t('aftersales.orderNo')}>
             <Input.Group>
               <Input
                 value={orderNo}
                 onChange={(value) => setOrderNo(value)}
-                placeholder="输入已收货/已完成订单号"
+                placeholder={t('aftersales.orderNoPlaceholder')}
                 style={{ width: '70%' }}
               />
               <Button style={{ marginLeft: 8 }} onClick={loadOrder}>
-                加载商品
+                {t('aftersales.loadItems')}
               </Button>
             </Input.Group>
           </FormItem>
-          <FormItem label="售后类型">
+          <FormItem label={t('aftersales.typeLabel')}>
             <Select value={applyType} onChange={(value) => setApplyType(Number(value))}>
-              <Select.Option value={1}>退货</Select.Option>
-              <Select.Option value={2}>换货</Select.Option>
-              <Select.Option value={3}>维修</Select.Option>
+              <Select.Option value={1}>{t('aftersales.type1')}</Select.Option>
+              <Select.Option value={2}>{t('aftersales.type2')}</Select.Option>
+              <Select.Option value={3}>{t('aftersales.type3')}</Select.Option>
             </Select>
           </FormItem>
-          <FormItem label="售后原因">
+          <FormItem label={t('aftersales.reasonLabel')}>
             <Input.TextArea
               value={applyReason}
               onChange={setApplyReason}
-              placeholder="请描述售后原因"
+              placeholder={t('aftersales.reasonPlaceholder')}
               rows={2}
             />
           </FormItem>
-          <FormItem label="选择售后商品（默认全量）">
+          <FormItem label={t('aftersales.itemsLabel')}>
             <Table
               rowKey="id"
               size="small"
@@ -241,9 +230,9 @@ export default function AfterSalesPage() {
                   ),
               }}
               columns={[
-                { title: '商品', dataIndex: 'skuName' },
-                { title: '数量', dataIndex: 'quantity' },
-                { title: '单价', dataIndex: 'unitPrice' },
+                { title: t('aftersales.product'), dataIndex: 'skuName' },
+                { title: t('aftersales.quantity'), dataIndex: 'quantity' },
+                { title: t('aftersales.unitPrice'), dataIndex: 'unitPrice' },
               ]}
             />
           </FormItem>

@@ -1,5 +1,6 @@
 packages:
   - admin
   - portal
+  - mobile
 minimumReleaseAgeExclude:
   - eslint@10.8.1

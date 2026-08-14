@@ -9,6 +9,7 @@ import {
   Modal,
   Space,
 } from '@arco-design/web-react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import { createOrder } from '@/api/orders'
@@ -21,6 +22,7 @@ const { Row, Col } = Grid
 
 export default function ProductsPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [list, setList] = useState<SkuRecord[]>([])
   const [orderVisible, setOrderVisible] = useState(false)
@@ -50,7 +52,7 @@ export default function ProductsPage() {
 
   async function submitOrder() {
     if (!current || !userStore.user?.merchantId) {
-      Message.warning('请先以商户账号登录')
+      Message.warning(t('products.needMerchantLogin'))
       return
     }
     const values = await form.validate()
@@ -61,7 +63,7 @@ export default function ProductsPage() {
         orderType: 1,
         items: [{ skuId: current.id, quantity: values.quantity }],
       })
-      Message.success(`下单成功：${order.orderNo}`)
+      Message.success(t('products.orderSuccess', { orderNo: order.orderNo }))
       setOrderVisible(false)
       navigate('/orders')
     } finally {
@@ -70,17 +72,21 @@ export default function ProductsPage() {
   }
 
   return (
-    <Card title="商品下单" loading={loading}>
+    <Card title={t('products.title')} loading={loading}>
       <Row gutter={[16, 16]}>
         {list.map((sku) => (
           <Col xs={24} sm={12} lg={8} key={sku.id}>
             <Card title={sku.name} style={{ marginBottom: 16 }}>
-              <p>SKU：{sku.skuNo}</p>
-              <p>规格：{sku.spec || '-'}</p>
+              <p>
+                {t('products.sku')}：{sku.skuNo}
+              </p>
+              <p>
+                {t('products.spec')}：{sku.spec || '-'}
+              </p>
               <Space>
                 <span style={{ color: 'rgb(var(--red-6))', fontSize: 18 }}>¥{sku.price}</span>
                 <Button type="primary" onClick={() => openOrder(sku)}>
-                  立即下单
+                  {t('products.orderNow')}
                 </Button>
               </Space>
             </Card>
@@ -90,13 +96,13 @@ export default function ProductsPage() {
 
       <Modal
         visible={orderVisible}
-        title={`下单：${current?.name ?? ''}`}
+        title={t('products.orderTitle', { name: current?.name ?? '' })}
         onCancel={() => setOrderVisible(false)}
         onOk={submitOrder}
         confirmLoading={submitting}
       >
         <Form form={form} layout="vertical">
-          <FormItem label="购买数量" field="quantity" initialValue={1}>
+          <FormItem label={t('products.quantity')} field="quantity" initialValue={1}>
             <InputNumber min={1} precision={0} style={{ width: '100%' }} />
           </FormItem>
         </Form>

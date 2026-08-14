@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import {
   getAfterSalesTypeStats,
@@ -9,33 +10,51 @@ import {
   getSalesSummary,
   getSalesTrend,
   getStockSummary,
+  type ChannelStats,
   type SalesSummary,
+  type TypeStats,
 } from '@/api/reports'
 import SimpleBar from '@/components/SimpleBar.vue'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const summary = ref<SalesSummary | null>(null)
 const trend = ref<{ label: string; value: number }[]>([])
 const expiry = ref<{ label: string; value: number }[]>([])
-const channels = ref<{ label: string; value: number }[]>([])
-const aftersales = ref<{ label: string; value: number }[]>([])
+const rawChannels = ref<ChannelStats[]>([])
+const rawAftersales = ref<TypeStats[]>([])
 const stockSummary = ref({ totalQuantity: 0, skuCount: 0 })
 const returnRate = ref({ rate: '0' })
 
-const CHANNEL_NAMES: Record<string, string> = {
-  wechat: '微信',
-  alipay: '支付宝',
-  visa: 'Visa',
-  mastercard: 'Mastercard',
-  balance: '余额',
-  mock: 'Mock 渠道',
+const CHANNEL_KEYS: Record<string, string> = {
+  wechat: 'home.channels.wechat',
+  alipay: 'home.channels.alipay',
+  visa: 'home.channels.visa',
+  mastercard: 'home.channels.mastercard',
+  balance: 'home.channels.balance',
+  mock: 'home.channels.mock',
 }
 
-const TYPE_NAMES: Record<number, string> = {
-  1: '退货',
-  2: '换货',
-  3: '维修',
+const TYPE_KEYS: Record<number, string> = {
+  1: 'home.aftersalesTypes.1',
+  2: 'home.aftersalesTypes.2',
+  3: 'home.aftersalesTypes.3',
 }
+
+const channels = computed(() =>
+  rawChannels.value.map((item) => ({
+    label: CHANNEL_KEYS[item.channel] ? t(CHANNEL_KEYS[item.channel]) : item.channel,
+    value: Number(item.successAmount),
+  })),
+)
+
+const aftersales = computed(() =>
+  rawAftersales.value.map((item) => ({
+    label: TYPE_KEYS[item.type] ? t(TYPE_KEYS[item.type]) : String(item.type),
+    value: item.count,
+  })),
+)
 
 async function load() {
   loading.value = true
@@ -47,7 +66,7 @@ async function load() {
       startDate: start.toISOString().slice(0, 10),
       endDate: end.toISOString().slice(0, 10),
     }
-    const [s, t, e, c, a, stock, rate] = await Promise.all([
+    const [s, tTrend, e, c, a, stock, rate] = await Promise.all([
       getSalesSummary(params),
       getSalesTrend(params),
       getExpiryDistribution(),
@@ -57,19 +76,13 @@ async function load() {
       getReturnRate(params),
     ])
     summary.value = s
-    trend.value = t.map((item) => ({
+    trend.value = tTrend.map((item) => ({
       label: item.bizDate.slice(5),
       value: Number(item.paidAmount),
     }))
     expiry.value = e.map((item) => ({ label: item.bucket, value: item.quantity }))
-    channels.value = c.map((item) => ({
-      label: CHANNEL_NAMES[item.channel] ?? item.channel,
-      value: Number(item.successAmount),
-    }))
-    aftersales.value = a.map((item) => ({
-      label: TYPE_NAMES[item.type] ?? String(item.type),
-      value: item.count,
-    }))
+    rawChannels.value = c
+    rawAftersales.value = a
     stockSummary.value = stock
     returnRate.value = rate
   } finally {
@@ -83,21 +96,21 @@ onMounted(load)
 <template>
   <div class="home">
     <a-card :bordered="false" class="welcome-card">
-      <template #title>OMS 数据大盘</template>
-      P0/P1 全流程已闭环，阶段三报表中心与数据大盘已上线；以下数据为近 30 天口径（可到报表中心查看明细与导出）。
+      <template #title>{{ t('home.title') }}</template>
+      {{ t('home.description') }}
     </a-card>
 
     <a-row :gutter="[16, 16]" class="stat-row">
       <a-col
         v-for="stat in [
-          { label: '支付金额(元)', value: Number(summary?.paidAmount ?? 0) },
-          { label: '订单数', value: summary?.orderCount ?? 0 },
-          { label: '客单价(元)', value: Number(summary?.avgOrderValue ?? 0) },
-          { label: '复购率(%)', value: Number(summary?.repurchaseRate ?? 0) },
-          { label: '总库存', value: stockSummary.totalQuantity },
-          { label: '库存 SKU 数', value: stockSummary.skuCount },
-          { label: '退款金额(元)', value: Number(summary?.refundAmount ?? 0) },
-          { label: '退货率(%)', value: Number(returnRate.rate) },
+          { label: t('home.paidAmount'), value: Number(summary?.paidAmount ?? 0) },
+          { label: t('home.orderCount'), value: summary?.orderCount ?? 0 },
+          { label: t('home.avgOrderValue'), value: Number(summary?.avgOrderValue ?? 0) },
+          { label: t('home.repurchaseRate'), value: Number(summary?.repurchaseRate ?? 0) },
+          { label: t('home.totalStock'), value: stockSummary.totalQuantity },
+          { label: t('home.stockSkuCount'), value: stockSummary.skuCount },
+          { label: t('home.refundAmount'), value: Number(summary?.refundAmount ?? 0) },
+          { label: t('home.returnRate'), value: Number(returnRate.rate) },
         ]" :key="stat.label" :xs="24" :sm="12" :lg="6"
       >
         <a-card :bordered="false">
@@ -108,22 +121,22 @@ onMounted(load)
 
     <a-row :gutter="[16, 16]">
       <a-col :xs="24" :lg="12">
-        <a-card :bordered="false" title="销售趋势" :loading="loading">
+        <a-card :bordered="false" :title="t('home.salesTrend')" :loading="loading">
           <SimpleBar :items="trend" />
         </a-card>
       </a-col>
       <a-col :xs="24" :lg="12">
-        <a-card :bordered="false" title="库存效期分布" :loading="loading">
+        <a-card :bordered="false" :title="t('home.expiryDistribution')" :loading="loading">
           <SimpleBar :items="expiry" color="rgb(var(--orange-6))" />
         </a-card>
       </a-col>
       <a-col :xs="24" :lg="12">
-        <a-card :bordered="false" title="支付渠道成功金额" :loading="loading">
+        <a-card :bordered="false" :title="t('home.channelAmount')" :loading="loading">
           <SimpleBar :items="channels" color="rgb(var(--purple-6))" />
         </a-card>
       </a-col>
       <a-col :xs="24" :lg="12">
-        <a-card :bordered="false" title="售后类型单量" :loading="loading">
+        <a-card :bordered="false" :title="t('home.aftersalesCount')" :loading="loading">
           <SimpleBar :items="aftersales" color="rgb(var(--red-6))" />
         </a-card>
       </a-col>

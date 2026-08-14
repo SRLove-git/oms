@@ -1,46 +1,59 @@
 import { useState } from 'react'
-import { Button, Layout, Menu, Message } from '@arco-design/web-react'
-import { IconHome, IconList, IconUnorderedList, IconRefresh } from '@arco-design/web-react/icon'
+import { Button, Dropdown, Layout, Menu, Message } from '@arco-design/web-react'
+import {
+  IconHome,
+  IconLanguage,
+  IconList,
+  IconMoon,
+  IconRefresh,
+  IconSun,
+  IconUnorderedList,
+} from '@arco-design/web-react/icon'
+import { useTranslation } from 'react-i18next'
 import { Outlet, useNavigate } from 'react-router-dom'
 
+import { appStore, useAppStore } from '@/stores/app'
+import type { Locale } from '@/stores/app'
 import { userStore } from '@/stores/user'
 
 const { Sider, Header, Content } = Layout
 const MenuItem = Menu.Item
 
 export default function BasicLayout() {
+  const { t } = useTranslation()
+  const { locale, theme } = useAppStore()
   const [collapsed, setCollapsed] = useState(false)
   const navigate = useNavigate()
 
   function handleLogout() {
     userStore.logout()
-    Message.success('已退出登录')
+    Message.success(t('common.logoutSuccess'))
     navigate('/login')
   }
 
   return (
     <Layout className="basic-layout">
       <Sider className="basic-sider" collapsed={collapsed} collapsible width={220}>
-        <div className="logo">{collapsed ? 'OMS' : '商家门户'}</div>
+        <div className="logo">{collapsed ? 'OMS' : t('layout.portalName')}</div>
         <Menu
           selectedKeys={[window.location.pathname]}
           onClickMenuItem={(key) => navigate(key)}
         >
           <MenuItem key="/">
             <IconHome />
-            首页
+            {t('layout.home')}
           </MenuItem>
           <MenuItem key="/products">
             <IconList />
-            商品下单
+            {t('layout.products')}
           </MenuItem>
           <MenuItem key="/orders">
             <IconUnorderedList />
-            我的订单
+            {t('layout.orders')}
           </MenuItem>
           <MenuItem key="/after-sales">
             <IconRefresh />
-            我的售后
+            {t('layout.afterSales')}
           </MenuItem>
         </Menu>
       </Sider>
@@ -48,12 +61,33 @@ export default function BasicLayout() {
       <Layout>
         <Header className="basic-header">
           <Button type="text" onClick={() => setCollapsed((value) => !value)}>
-            {collapsed ? '展开' : '收起'}
+            {collapsed ? t('common.expand') : t('common.collapse')}
           </Button>
+          <div className="header-tools">
+            <Dropdown
+              trigger="click"
+              droplist={
+                <Menu onClickMenuItem={(key) => appStore.setLocale(key as Locale)}>
+                  <MenuItem key="zh-CN">简体中文</MenuItem>
+                  <MenuItem key="en-US">English</MenuItem>
+                </Menu>
+              }
+            >
+              <Button type="text" icon={<IconLanguage />}>
+                {locale === 'zh-CN' ? '中文' : 'EN'}
+              </Button>
+            </Dropdown>
+            <Button
+              type="text"
+              icon={theme === 'dark' ? <IconSun /> : <IconMoon />}
+              aria-label={theme === 'dark' ? t('layout.switchToLight') : t('layout.switchToDark')}
+              onClick={() => appStore.toggleTheme()}
+            />
+          </div>
           <div className="header-user">
             <span>{userStore.user?.realName ?? userStore.user?.username}</span>
             <Button type="text" size="small" onClick={handleLogout}>
-              退出登录
+              {t('common.logout')}
             </Button>
           </div>
         </Header>

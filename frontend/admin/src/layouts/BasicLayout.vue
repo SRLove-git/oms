@@ -1,13 +1,21 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
+import { i18n, type Locale } from '@/i18n'
+import { updateDocumentTitle } from '@/router/title'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
 const userStore = useUserStore()
+
+const headerTitle = computed(() => t(String(route.meta.title ?? 'app.name')))
 
 type MenuKey = string | number | Record<string, unknown> | undefined
 
@@ -24,35 +32,44 @@ function onUserAction(key: MenuKey) {
     router.push('/login')
   }
 }
+
+function onLanguageSelect(key: MenuKey) {
+  const value = typeof key === 'string' ? key : ''
+  if (value === 'zh-CN' || value === 'en-US') {
+    appStore.setLocale(value as Locale)
+    i18n.global.locale.value = value
+    updateDocumentTitle(route)
+  }
+}
 </script>
 
 <template>
   <a-layout class="basic-layout">
     <a-layout-sider class="basic-sider" :collapsed="appStore.collapsed" collapsible :width="220">
-      <div class="logo">{{ appStore.collapsed ? 'OMS' : 'OMS 管理端' }}</div>
+      <div class="logo">{{ appStore.collapsed ? t('app.shortName') : t('app.name') }}</div>
       <a-menu :selected-keys="[route.path]" @menu-item-click="onMenuClick">
         <a-menu-item key="/home">
           <template #icon><icon-home /></template>
-          首页
+          {{ t('menu.home') }}
         </a-menu-item>
-        <a-menu-item key="/orders">订单管理</a-menu-item>
-        <a-menu-item key="/products">商品管理</a-menu-item>
-        <a-menu-item key="/inventories">库存管理</a-menu-item>
-        <a-menu-item key="/payments">支付记录</a-menu-item>
-        <a-menu-item key="/merchants">商户管理</a-menu-item>
-        <a-menu-item key="/qualifications">资质管理</a-menu-item>
-        <a-menu-item key="/users">用户管理</a-menu-item>
-        <a-menu-item key="/audit-logs">审计日志</a-menu-item>
-        <a-menu-item key="/after-sales">售后服务</a-menu-item>
-        <a-menu-item key="/reconciliation">支付对账</a-menu-item>
-        <a-menu-item key="/logistics">物流轨迹</a-menu-item>
-        <a-menu-item key="/notifications">消息通知</a-menu-item>
+        <a-menu-item key="/orders">{{ t('menu.orders') }}</a-menu-item>
+        <a-menu-item key="/products">{{ t('menu.products') }}</a-menu-item>
+        <a-menu-item key="/inventories">{{ t('menu.inventories') }}</a-menu-item>
+        <a-menu-item key="/payments">{{ t('menu.payments') }}</a-menu-item>
+        <a-menu-item key="/merchants">{{ t('menu.merchants') }}</a-menu-item>
+        <a-menu-item key="/qualifications">{{ t('menu.qualifications') }}</a-menu-item>
+        <a-menu-item key="/users">{{ t('menu.users') }}</a-menu-item>
+        <a-menu-item key="/audit-logs">{{ t('menu.auditLogs') }}</a-menu-item>
+        <a-menu-item key="/after-sales">{{ t('menu.afterSales') }}</a-menu-item>
+        <a-menu-item key="/reconciliation">{{ t('menu.reconciliation') }}</a-menu-item>
+        <a-menu-item key="/logistics">{{ t('menu.logistics') }}</a-menu-item>
+        <a-menu-item key="/notifications">{{ t('menu.notifications') }}</a-menu-item>
         <a-sub-menu key="reports">
-          <template #title>报表中心</template>
-          <a-menu-item key="/reports/sales">销售报表</a-menu-item>
-          <a-menu-item key="/reports/inventory">库存报表</a-menu-item>
-          <a-menu-item key="/reports/payments">支付报表</a-menu-item>
-          <a-menu-item key="/reports/aftersales">售后报表</a-menu-item>
+          <template #title>{{ t('menu.reports') }}</template>
+          <a-menu-item key="/reports/sales">{{ t('menu.reportsSales') }}</a-menu-item>
+          <a-menu-item key="/reports/inventory">{{ t('menu.reportsInventory') }}</a-menu-item>
+          <a-menu-item key="/reports/payments">{{ t('menu.reportsPayments') }}</a-menu-item>
+          <a-menu-item key="/reports/aftersales">{{ t('menu.reportsAftersales') }}</a-menu-item>
         </a-sub-menu>
       </a-menu>
     </a-layout-sider>
@@ -63,14 +80,33 @@ function onUserAction(key: MenuKey) {
           <icon-menu-unfold v-if="appStore.collapsed" />
           <icon-menu-fold v-else />
         </a-button>
-        <span class="header-title">{{ route.meta.title ?? 'OMS 管理端' }}</span>
+        <span class="header-title">{{ headerTitle }}</span>
         <a-space class="header-actions">
+          <a-dropdown @select="onLanguageSelect">
+            <a-button type="text" :aria-label="t('common.language')">
+              <template #icon><icon-language /></template>
+              {{ appStore.locale === 'zh-CN' ? '简体中文' : 'English' }}
+            </a-button>
+            <template #content>
+              <a-doption value="zh-CN">简体中文</a-doption>
+              <a-doption value="en-US">English</a-doption>
+            </template>
+          </a-dropdown>
+          <a-button
+            type="text"
+            class="theme-btn"
+            :aria-label="appStore.theme === 'dark' ? t('common.lightMode') : t('common.darkMode')"
+            @click="appStore.toggleTheme()"
+          >
+            <icon-sun-fill v-if="appStore.theme === 'dark'" />
+            <icon-moon-fill v-else />
+          </a-button>
           <a-dropdown @select="onUserAction">
             <a-button type="text">
               {{ userStore.user?.realName ?? userStore.user?.username }}
             </a-button>
             <template #content>
-              <a-doption value="logout">退出登录</a-doption>
+              <a-doption value="logout">{{ t('common.logout') }}</a-doption>
             </template>
           </a-dropdown>
         </a-space>
@@ -112,6 +148,10 @@ function onUserAction(key: MenuKey) {
 
 .collapse-btn {
   font-size: 18px;
+}
+
+.theme-btn {
+  font-size: 16px;
 }
 
 .header-title {
