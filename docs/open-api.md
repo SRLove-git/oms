@@ -134,7 +134,7 @@ oms:
 - **幂等下单**：同一 `externalOrderNo` 重复提交返回首次创建的订单；并发重复由 `uk_external_order_no` 唯一索引兜底，重复单自动回滚并释放库存。
 - **租户隔离**：查单/取消校验订单 `merchant_id` 与 appId 映射的商户一致，不一致返回 403。
 - **审计**：开放 API 产生的订单状态流转，操作人统一记为 `OPEN_API`，全程进入订单日志。
-- **状态只读反馈**：发货、签收、退款等结果由 OMS 内部流程驱动，商城通过查单接口轮询/回调订阅获取（回调推送在商城侧就绪后补充）。
+- **状态只读反馈（当前口径）**：发货、签收、退款等结果由 OMS 内部流程驱动，商城侧通过查单接口（`GET /api/v1/open/orders/{externalOrderNo}`）**轮询获取**；建议轮询间隔 ≥ 5 秒，配合订单状态与 `paidAt`/日志时间线判断增量。**回调订阅为下一迭代规划，协议见第 7 节，双方按该契约预留，未实施前不得依赖回调。**
 
 ## 6. 与第三方平台集成的区别
 
@@ -144,3 +144,40 @@ oms:
 | 商城 → OMS（本文档） | 网关 + order/inventory | 自营商城/分销平台通过开放 API 主动对接 OMS |
 
 两类通道互相独立，商城侧接入不依赖第三方电商平台资质。
+
+## 7. 回调订阅（规划，待商城侧就绪后实施）
+
+> 本节为预留契约：当前**未实现**，商城侧一律按第 5 节轮询。实施时以本节为准，两端同步开发。
+
+### 7.1 事件模型
+
+| 事件 | 触发点 | payload 关键字段 |
+| :--- | :--- | :--- |
+| `order.paid` | 支付成功回调处理完成 | `orderNo`、`externalOrderNo`、`paidAt`、`payAmount` |
+| `order.audited` | 审核通过 | `orderNo`、`externalOrderNo`、`auditedAt` |
+| `order.shipped` | 发货 | `orderNo`、`externalOrderNo`、`trackingNo`、`carrier`、`shippedAt` |
+| `order.signed` | 签收 | `orderNo`、`externalOrderNo`、`signedAt` |
+| `order.completed` | 完成 | `orderNo`、`externalOrderNo`、`completedAt` |
+| `order.cancelled` | 取消/超时取消 | `orderNo`、`externalOrderNo`、`reason`、`cancelledAt` |
+| `order.refunded` | 退款完成（含部分退款） | `orderNo`、`externalOrderNo`、`paymentNo`、`refundAmount` |
+| `aftersale.updated` | 售后状态变更 | `orderNo`、`externalOrderNo`、`returnNo`、`type`、`status` |
+
+### 7.2 推送方式
+
+- **方向**：OMS → 商城。商城在接入申请时提供回调地址，OMS 按 appId 配置 `callback-url` 与 `callback-secret`（网关 `oms.open-api.clients` 扩展字段）。
+- **协议**：`POST {callback-url}`，请求体 `{ event, eventId, appId, timestamp, data }`；OMS 作为调用方按第 2 节同款 HMAC-SHA256 方案签名（请求头 `X-App-Id / X-Timestamp / X-Nonce / X-Sign`），商城验签通过后返回 `{"code":0}` 视为成功。
+- **幂等**：`eventId` 全局唯一，商城侧需按 `eventId` 去重（重复投递场景必须容忍）。
+
+### 7.3 可靠性
+
+- **重试**：失败至少重试 5 次，指数退避（如 1s/5s/30s/5min/30min），全部失败进入死信并告警。
+- **兜底**：回调失败不影响 OMS 内部状态流转；商城侧始终可以查单接口兜底核对（轮询与回调并存）。
+- **顺序**：同一订单的事件按发生顺序投递，商城侧按 `orderNo` 排队处理，避免乱序覆盖。
+- **审计**：每次投递与重试记录日志（含请求签名摘要与响应），可追溯、可对账。
+
+### 7.4 实施要点（后端预留位）
+
+- 订单状态机各流转点（`OrderService`）发出事件写入回调队列表（outbox，如 `open_api_event`：`event_id/event/app_id/order_no/payload/status/retry_count/next_retry_at`）。
+- 定时任务扫描待投递事件，签名后 POST 回调地址，成功置终态、失败退避重试。
+- 与订单日志共用流转钩子，保证事件不漏发（订单完成/取消为终态事件，退款事件由 payment-center 联动 after-sales 发出）。
+- 建议表结构与配置项在实施迭代内以 Flyway 迁移落地，不进本次交付。
