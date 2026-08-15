@@ -18,6 +18,10 @@ public final class OpenOrderDtos {
             String externalOrderNo,
             Integer orderType,
             String remark,
+            String consignee,
+            String phone,
+            String address,
+            BigDecimal deliveryFee,
             List<OrderItemRequest> items) {
     }
 
@@ -41,6 +45,10 @@ public final class OpenOrderDtos {
             BigDecimal totalAmount,
             String currency,
             String remark,
+            String consignee,
+            String phone,
+            String address,
+            BigDecimal deliveryFee,
             LocalDateTime paidAt,
             LocalDateTime createdAt,
             List<OrderItemResponse> items) {

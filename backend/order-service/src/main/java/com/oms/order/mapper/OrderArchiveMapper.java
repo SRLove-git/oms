@@ -31,10 +31,12 @@ public interface OrderArchiveMapper extends BaseMapper<OrderArchive> {
             INSERT INTO order_archive (
                 id, order_no, external_order_no, merchant_id, customer_id, order_type, source, status,
                 total_amount, pay_amount, discount_amount, currency, warehouse_id, remark,
+                consignee, phone, address, delivery_fee,
                 paid_at, cancelled_at, timeout_at, version, deleted, created_at, updated_at, archived_at)
             SELECT
                 id, order_no, external_order_no, merchant_id, customer_id, order_type, source, status,
                 total_amount, pay_amount, discount_amount, currency, warehouse_id, remark,
+                consignee, phone, address, delivery_fee,
                 paid_at, cancelled_at, timeout_at, version, deleted, created_at, updated_at, NOW()
             FROM `order`
             WHERE id IN

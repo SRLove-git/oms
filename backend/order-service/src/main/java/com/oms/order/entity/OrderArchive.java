@@ -24,6 +24,10 @@ public class OrderArchive {
     private String currency;
     private Long warehouseId;
     private String remark;
+    private String consignee;
+    private String phone;
+    private String address;
+    private BigDecimal deliveryFee;
     private LocalDateTime paidAt;
     private LocalDateTime cancelledAt;
     private LocalDateTime timeoutAt;
@@ -143,6 +147,38 @@ public class OrderArchive {
 
     public void setRemark(String remark) {
         this.remark = remark;
+    }
+
+    public String getConsignee() {
+        return consignee;
+    }
+
+    public void setConsignee(String consignee) {
+        this.consignee = consignee;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
+    public BigDecimal getDeliveryFee() {
+        return deliveryFee;
+    }
+
+    public void setDeliveryFee(BigDecimal deliveryFee) {
+        this.deliveryFee = deliveryFee;
     }
 
     public LocalDateTime getPaidAt() {

@@ -81,7 +81,7 @@ fi
 log ''
 log '== 3. 下单（幂等）=='
 EXTERNAL_NO="MALL-$(date +%s)"
-ORDER_BODY=$(printf '{"externalOrderNo":"%s","orderType":2,"remark":"开放 API 冒烟","items":[{"skuId":%s,"quantity":1}]}' "$EXTERNAL_NO" "${SKU_ID:-1}")
+ORDER_BODY=$(printf '{"externalOrderNo":"%s","orderType":2,"remark":"开放 API 冒烟","consignee":"冒烟收货人","phone":"+65 8123 4567","address":"新加坡冒烟路 1 号","deliveryFee":9.90,"items":[{"skuId":%s,"quantity":1}]}' "$EXTERNAL_NO" "${SKU_ID:-1}")
 
 if [[ -n "$SKU_ID" ]]; then
   FIRST=$(open_api POST '/api/v1/open/orders' "$ORDER_BODY")
@@ -98,6 +98,13 @@ if [[ -n "$SKU_ID" ]]; then
     pass '重复提交幂等（返回同一订单）'
   else
     fail "幂等校验失败: 首次=$ORDER_NO_1 二次=$ORDER_NO_2"
+  fi
+
+  if printf '%s' "$FIRST" | json_val data.consignee | grep -q '冒烟收货人' \
+     && printf '%s' "$FIRST" | json_val data.deliveryFee | grep -q '9.90'; then
+    pass '下单响应含收货信息与配送费'
+  else
+    fail "下单响应缺少收货信息/配送费: $FIRST"
   fi
 
   log ''

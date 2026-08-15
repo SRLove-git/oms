@@ -23,6 +23,7 @@ import com.oms.order.dto.OrderDtos.CancelRequest;
 import com.oms.order.dto.OrderDtos.CreateOrderRequest;
 import com.oms.order.dto.OrderDtos.OrderItemRequest;
 import com.oms.order.dto.OrderDtos.PaymentSuccessRequest;
+import com.oms.order.dto.OpenOrderDtos.OpenCreateOrderRequest;
 import com.oms.order.dto.OpenOrderDtos.OpenOrderResponse;
 import com.oms.order.dto.OpenOrderDtos.OpenPaymentNotifyRequest;
 import com.oms.order.entity.Order;
@@ -427,6 +428,92 @@ class OrderServiceBusinessTest {
 
         verify(inventoryClient, never()).release(any());
         verify(orderMapper, never()).updateById(any(Order.class));
+    }
+
+    // ---------- 商城开放 API 下单（收货信息与配送费） ----------
+
+    @Test
+    void createOpenShouldPersistShippingAndDeliveryFeeIntoAmounts() {
+        SkuInfo sku = new SkuInfo(1L, "SKU001", "商品A", new BigDecimal("100.00"), new BigDecimal("60.00"), 1);
+        when(inventoryClient.getSku(1L)).thenReturn(Result.ok(sku));
+        when(inventoryClient.reserve(any())).thenReturn(Result.ok());
+        when(orderMapper.insert(any(Order.class))).thenAnswer(invocation -> {
+            ((Order) invocation.getArgument(0)).setId(1L);
+            return 1;
+        });
+        Order stub = order(OrderStatus.PENDING_PAYMENT);
+        // 1) findByExternalOrderNo → null（新订单）；2) create 内部查单、3) createOpen 再查单 → 同一订单
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(null, stub, stub);
+        when(orderItemMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(orderLogMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+
+        OpenOrderResponse response = orderService.createOpen(
+                new OpenCreateOrderRequest(
+                        "B20260815001", 2, "商城订单", "张三", "+65 8123 4567", "新加坡示例路 1 号",
+                        new BigDecimal("9.90"), List.of(new OrderItemRequest(1L, 2))),
+                1L);
+
+        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+        verify(orderMapper).updateById(captor.capture());
+        Order saved = captor.getValue();
+        assertThat(saved.getExternalOrderNo()).isEqualTo("B20260815001");
+        assertThat(saved.getSource()).isEqualTo("OPEN_API");
+        assertThat(saved.getConsignee()).isEqualTo("张三");
+        assertThat(saved.getPhone()).isEqualTo("+65 8123 4567");
+        assertThat(saved.getAddress()).isEqualTo("新加坡示例路 1 号");
+        assertThat(saved.getDeliveryFee()).isEqualByComparingTo("9.90");
+        // 商品 100.00 + 配送费 9.90
+        assertThat(saved.getTotalAmount()).isEqualByComparingTo("109.90");
+        assertThat(saved.getPayAmount()).isEqualByComparingTo("109.90");
+
+        assertThat(response.consignee()).isEqualTo("张三");
+        assertThat(response.phone()).isEqualTo("+65 8123 4567");
+        assertThat(response.address()).isEqualTo("新加坡示例路 1 号");
+        assertThat(response.deliveryFee()).isEqualByComparingTo("9.90");
+        assertThat(response.totalAmount()).isEqualByComparingTo("109.90");
+    }
+
+    @Test
+    void createOpenShouldDefaultDeliveryFeeToZeroWhenAbsent() {
+        SkuInfo sku = new SkuInfo(1L, "SKU001", "商品A", new BigDecimal("100.00"), new BigDecimal("60.00"), 1);
+        when(inventoryClient.getSku(1L)).thenReturn(Result.ok(sku));
+        when(inventoryClient.reserve(any())).thenReturn(Result.ok());
+        when(orderMapper.insert(any(Order.class))).thenAnswer(invocation -> {
+            ((Order) invocation.getArgument(0)).setId(1L);
+            return 1;
+        });
+        Order stub = order(OrderStatus.PENDING_PAYMENT);
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(null, stub, stub);
+        when(orderItemMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(orderLogMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+
+        OpenOrderResponse response = orderService.createOpen(
+                new OpenCreateOrderRequest(
+                        "B20260815002", 2, null, null, null, null, null,
+                        List.of(new OrderItemRequest(1L, 2))),
+                1L);
+
+        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+        verify(orderMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getDeliveryFee()).isEqualByComparingTo("0.00");
+        assertThat(captor.getValue().getTotalAmount()).isEqualByComparingTo("100.00");
+        assertThat(response.deliveryFee()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void createOpenShouldRejectNegativeDeliveryFee() {
+        SkuInfo sku = new SkuInfo(1L, "SKU001", "商品A", new BigDecimal("100.00"), new BigDecimal("60.00"), 1);
+        when(inventoryClient.getSku(1L)).thenReturn(Result.ok(sku));
+
+        assertThatThrownBy(() -> orderService.createOpen(
+                        new OpenCreateOrderRequest(
+                                "B20260815003", 2, null, null, null, null,
+                                new BigDecimal("-1.00"), List.of(new OrderItemRequest(1L, 2))),
+                        1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("配送费不能为负数");
+        verify(inventoryClient, never()).reserve(any());
+        verify(orderMapper, never()).insert(any(Order.class));
     }
 
     // ---------- 商城支付成功通知 ----------

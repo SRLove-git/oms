@@ -100,11 +100,30 @@ oms:
   "externalOrderNo": "M20260814001",
   "orderType": 2,
   "remark": "商城订单",
+  "consignee": "张三",
+  "phone": "+65 8123 4567",
+  "address": "新加坡示例路 1 号",
+  "deliveryFee": 9.90,
   "items": [
     { "skuId": 1001, "quantity": 2 }
   ]
 }
 ```
+
+请求字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `externalOrderNo` | string | 是 | 外部订单号，全局唯一，幂等键 |
+| `orderType` | int | 否 | 默认 `1`，商城零售订单传 `2`（B2C） |
+| `remark` | string | 否 | 备注 |
+| `consignee` | string | 否 | 收货人（OMS 发货使用，建议必填） |
+| `phone` | string | 否 | 收货电话（建议必填） |
+| `address` | string | 否 | 收货地址（建议必填） |
+| `deliveryFee` | decimal | 否 | 配送费，默认 `0`，不能为负；计入订单总额与应付金额 |
+| `items` | array | 是 | 订单明细 |
+| `items[].skuId` | long | 是 | OMS SKU ID |
+| `items[].quantity` | int | 是 | 购买数量 |
 
 下单响应（`code=0` 成功）：
 
@@ -118,15 +137,21 @@ oms:
     "source": "OPEN_API",
     "orderType": 2,
     "status": 1,
-    "totalAmount": 199.0,
+    "totalAmount": 208.90,
     "currency": "SGD",
     "remark": "商城订单",
+    "consignee": "张三",
+    "phone": "+65 8123 4567",
+    "address": "新加坡示例路 1 号",
+    "deliveryFee": 9.90,
     "paidAt": null,
     "createdAt": "2026-08-14T12:00:01",
     "items": [ ... ]
   }
 }
 ```
+
+金额口径：`totalAmount`（订单总额）= 商品总额 + `deliveryFee`，支付成功通知的 `amount` 必须与该 `totalAmount` 一致。
 
 订单状态：`1-待支付 2-已支付 3-已审核 4-已发货 5-已签收 6-已完成 7-已取消`（与内部口径一致）。
 
@@ -154,7 +179,7 @@ X-Sign: ...
 | 字段 | 必填 | 说明 |
 | :--- | :--- | :--- |
 | `paymentNo` | 是 | 商城支付流水号，全局唯一，作为幂等键 |
-| `amount` | 是 | 实收金额，必须与订单应付金额一致，否则 409 |
+| `amount` | 是 | 实收金额，必须与订单应付金额一致（应付金额 = 商品总额 + 配送费，即下单响应中的 `totalAmount`），否则 409 |
 | `channel` | 否 | 商城收款渠道（wechat/alipay/balance 等），默认 `OPEN_API` |
 | `channelTxnNo` | 否 | 渠道交易号（对账用） |
 | `paidAt` | 否 | 支付完成时间，默认服务器当前时间 |

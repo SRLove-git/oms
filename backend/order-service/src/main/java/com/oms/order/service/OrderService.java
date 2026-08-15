@@ -36,6 +36,7 @@ import com.oms.order.mapper.OrderMapper;
 import com.oms.order.mapper.OrderPaymentMapper;
 import com.oms.common.core.result.Result;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -137,6 +138,7 @@ public class OrderService {
         if (request.externalOrderNo() == null || request.externalOrderNo().isBlank()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "externalOrderNo 不能为空");
         }
+        BigDecimal deliveryFee = normalizeDeliveryFee(request.deliveryFee());
         Order existing = findByExternalOrderNo(request.externalOrderNo());
         if (existing != null) {
             requireMerchant(existing.getMerchantId(), merchantId);
@@ -149,6 +151,13 @@ public class OrderService {
         Order order = findOrder(created.orderNo());
         order.setExternalOrderNo(request.externalOrderNo());
         order.setSource("OPEN_API");
+        order.setConsignee(trimToNull(request.consignee()));
+        order.setPhone(trimToNull(request.phone()));
+        order.setAddress(trimToNull(request.address()));
+        // 配送费计入订单总额与应付金额（支付成功通知金额 = 商品总额 + 配送费）
+        order.setDeliveryFee(deliveryFee);
+        order.setTotalAmount(order.getTotalAmount().add(deliveryFee));
+        order.setPayAmount(order.getTotalAmount());
         try {
             orderMapper.updateById(order);
         } catch (DuplicateKeyException ex) {
@@ -190,6 +199,10 @@ public class OrderService {
                     detail.totalAmount(),
                     detail.currency(),
                     detail.remark(),
+                    archived.getConsignee(),
+                    archived.getPhone(),
+                    archived.getAddress(),
+                    archived.getDeliveryFee(),
                     detail.paidAt(),
                     detail.createdAt(),
                     detail.items());
@@ -685,6 +698,10 @@ public class OrderService {
                 order.getTotalAmount(),
                 order.getCurrency(),
                 order.getRemark(),
+                order.getConsignee(),
+                order.getPhone(),
+                order.getAddress(),
+                order.getDeliveryFee(),
                 order.getPaidAt(),
                 order.getCreatedAt(),
                 items.stream()
@@ -701,6 +718,25 @@ public class OrderService {
     private String generateOrderNo() {
         String ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
         return "O" + ts + ThreadLocalRandom.current().nextInt(10000, 100000);
+    }
+
+    /** 配送费：为空按 0，负数拒绝，统一两位小数。 */
+    private static BigDecimal normalizeDeliveryFee(BigDecimal deliveryFee) {
+        if (deliveryFee == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        if (deliveryFee.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "配送费不能为负数");
+        }
+        return deliveryFee.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private OrderResponse toResponse(Order order, List<OrderItem> items, List<OrderLog> logs) {
