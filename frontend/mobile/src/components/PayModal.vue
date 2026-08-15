@@ -13,7 +13,7 @@
       <div>{{ t('payment.content', { paymentNo: payInfo?.paymentNo ?? '-' }) }}</div>
       <div class="mt-8">
         {{ t('payment.amount') }}：
-        <span class="text-price">¥{{ payInfo ? formatPrice(payInfo.amount) : '-' }}</span>
+        <span class="text-price">S${{ payInfo ? formatPrice(payInfo.amount) : '-' }}</span>
       </div>
     </template>
   </a-modal>

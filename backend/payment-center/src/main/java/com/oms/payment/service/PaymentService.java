@@ -48,6 +48,9 @@ public class PaymentService {
     @Value("${oms.payment.mock-only:true}")
     private boolean mockOnly;
 
+    @Value("${oms.payment.currency:SGD}")
+    private String defaultCurrency;
+
     public PaymentService(
             PaymentTransactionMapper transactionMapper,
             PaymentNotifyLogMapper notifyLogMapper,
@@ -92,7 +95,7 @@ public class PaymentService {
         transaction.setOrderNo(request.orderNo());
         transaction.setChannel(adapter.channel());
         transaction.setAmount(request.amount() == null ? BigDecimal.ZERO : request.amount());
-        transaction.setCurrency(request.currency() == null ? "CNY" : request.currency());
+        transaction.setCurrency(request.currency() == null ? defaultCurrency : request.currency());
         transaction.setStatus(1);
         transaction.setNotifyCount(0);
         transactionMapper.insert(transaction);

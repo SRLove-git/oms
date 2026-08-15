@@ -33,7 +33,7 @@ async function load() {
 function doRefund(row: PaymentRecord) {
   Modal.confirm({
     title: '发起退款',
-    content: `确定对支付单 ${row.paymentNo} 退款 ${row.amount} 元？`,
+    content: `确定对支付单 ${row.paymentNo} 退款 ${row.amount} SGD？`,
     onOk: async () => {
       await refundPayment(row.paymentNo, row.amount)
       Message.success('退款成功')

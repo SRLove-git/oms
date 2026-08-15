@@ -84,7 +84,7 @@ export default function ProductsPage() {
                 {t('products.spec')}：{sku.spec || '-'}
               </p>
               <Space>
-                <span style={{ color: 'rgb(var(--red-6))', fontSize: 18 }}>¥{sku.price}</span>
+                <span style={{ color: 'rgb(var(--red-6))', fontSize: 18 }}>S${sku.price}</span>
                 <Button type="primary" onClick={() => openOrder(sku)}>
                   {t('products.orderNow')}
                 </Button>

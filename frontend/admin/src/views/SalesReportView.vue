@@ -92,10 +92,10 @@ onMounted(() => {
         v-for="stat in [
           { label: '订单数', value: summary?.orderCount ?? 0 },
           { label: '支付订单数', value: summary?.paidOrderCount ?? 0 },
-          { label: '支付金额(元)', value: Number(summary?.paidAmount ?? 0) },
-          { label: '客单价(元)', value: Number(summary?.avgOrderValue ?? 0) },
-          { label: '毛利(元)', value: Number(summary?.grossProfit ?? 0) },
-          { label: '退款金额(元)', value: Number(summary?.refundAmount ?? 0) },
+          { label: '支付金额(SGD)', value: Number(summary?.paidAmount ?? 0) },
+          { label: '客单价(SGD)', value: Number(summary?.avgOrderValue ?? 0) },
+          { label: '毛利(SGD)', value: Number(summary?.grossProfit ?? 0) },
+          { label: '退款金额(SGD)', value: Number(summary?.refundAmount ?? 0) },
           { label: '复购率(%)', value: Number(summary?.repurchaseRate ?? 0) },
           { label: '复购客户数', value: summary?.repeatCustomers ?? 0 },
         ]" :key="stat.label" :xs="24" :sm="12" :lg="6"

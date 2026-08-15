@@ -50,10 +50,10 @@
         <div class="apply-item-main">
           <div class="apply-item-name">{{ item.skuName }}</div>
           <div class="text-muted" style="font-size: 12px">
-            ¥{{ formatPrice(item.unitPrice) }} × {{ item.quantity }}
+            S${{ formatPrice(item.unitPrice) }} × {{ item.quantity }}
           </div>
         </div>
-        <span class="text-price">¥{{ formatPrice(item.totalPrice) }}</span>
+        <span class="text-price">S${{ formatPrice(item.totalPrice) }}</span>
       </div>
     </div>
 

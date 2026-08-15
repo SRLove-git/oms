@@ -57,6 +57,7 @@ class OrderServiceTest {
                 paymentClient,
                 orderArchiveService);
         setField(orderService, "timeoutMinutes", 30L);
+        setField(orderService, "defaultCurrency", "SGD");
     }
 
     @Test
@@ -103,7 +104,7 @@ class OrderServiceTest {
         order.setStatus(status);
         order.setTotalAmount(new BigDecimal("100.00"));
         order.setPayAmount(new BigDecimal("100.00"));
-        order.setCurrency("CNY");
+        order.setCurrency("SGD");
         return order;
     }
 

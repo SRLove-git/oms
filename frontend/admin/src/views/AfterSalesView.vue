@@ -83,7 +83,7 @@ function doReceive(row: ReturnOrderSummary) {
 function doRefund(row: ReturnOrderSummary) {
   Modal.confirm({
     title: '确认退款',
-    content: `确定对售后单 ${row.returnNo} 发起退款 ${row.totalAmount} 元？（需先完成收货质检）`,
+    content: `确定对售后单 ${row.returnNo} 发起退款 ${row.totalAmount} SGD？（需先完成收货质检）`,
     onOk: async () => {
       await refundReturnOrder(row.returnNo, '', row.totalAmount)
       Message.success('退款成功')

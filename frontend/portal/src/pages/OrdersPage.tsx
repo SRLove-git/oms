@@ -201,7 +201,7 @@ export default function OrdersPage() {
       >
         {t('orders.paymentNo')}：{payInfo?.paymentNo}
         <br />
-        {t('orders.paymentAmount')}：{payInfo?.amount} CNY
+        {t('orders.paymentAmount')}：{payInfo?.amount} SGD
       </Modal>
     </Card>
   )

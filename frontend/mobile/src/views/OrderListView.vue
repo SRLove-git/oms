@@ -24,7 +24,7 @@
         </div>
         <div class="app-list-item-row">
           <span>{{ t('orders.amount') }}</span>
-          <span class="text-price">¥{{ formatPrice(order.payAmount) }}</span>
+          <span class="text-price">S${{ formatPrice(order.payAmount) }}</span>
         </div>
         <div class="app-list-item-row">
           <span>{{ t('orders.itemCount') }}</span>

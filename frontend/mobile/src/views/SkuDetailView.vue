@@ -6,7 +6,7 @@
       <div class="app-card">
         <div class="sku-detail-name">{{ sku.name }}</div>
         <div class="sku-detail-spec text-muted">{{ sku.spec || '-' }}</div>
-        <div class="sku-detail-price">¥{{ formatPrice(sku.price) }}</div>
+        <div class="sku-detail-price">S${{ formatPrice(sku.price) }}</div>
         <div class="mt-12">
           <a-tag :color="sku.status === 1 ? 'green' : 'gray'" size="small">
             {{ sku.status === 1 ? t('home.onSale') : t('home.offShelf') }}

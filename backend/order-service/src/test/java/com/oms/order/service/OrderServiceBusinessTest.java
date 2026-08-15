@@ -70,6 +70,7 @@ class OrderServiceBusinessTest {
                 paymentClient,
                 orderArchiveService);
         setField(orderService, "timeoutMinutes", 30L);
+        setField(orderService, "defaultCurrency", "SGD");
     }
 
     // ---------- 创建订单 ----------
@@ -136,7 +137,7 @@ class OrderServiceBusinessTest {
         assertThat(saved.getTotalAmount()).isEqualByComparingTo("350.00");
         assertThat(saved.getPayAmount()).isEqualByComparingTo("350.00");
         assertThat(saved.getDiscountAmount()).isEqualByComparingTo("0");
-        assertThat(saved.getCurrency()).isEqualTo("CNY");
+        assertThat(saved.getCurrency()).isEqualTo("SGD");
         assertThat(saved.getTimeoutAt())
                 .isNotNull()
                 .isAfter(LocalDateTime.now().minusMinutes(1))
@@ -538,7 +539,7 @@ class OrderServiceBusinessTest {
         order.setStatus(status);
         order.setTotalAmount(new BigDecimal("100.00"));
         order.setPayAmount(new BigDecimal("100.00"));
-        order.setCurrency("CNY");
+        order.setCurrency("SGD");
         return order;
     }
 

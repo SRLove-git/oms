@@ -64,6 +64,9 @@ public class OrderService {
     @Value("${oms.order.timeout-minutes:30}")
     private long timeoutMinutes;
 
+    @Value("${oms.order.currency:SGD}")
+    private String defaultCurrency;
+
     public OrderService(
             OrderMapper orderMapper,
             OrderItemMapper orderItemMapper,
@@ -309,7 +312,7 @@ public class OrderService {
         order.setTotalAmount(total);
         order.setPayAmount(total);
         order.setDiscountAmount(BigDecimal.ZERO);
-        order.setCurrency("CNY");
+        order.setCurrency(defaultCurrency);
         order.setRemark(request.remark());
         order.setTimeoutAt(LocalDateTime.now().plusMinutes(timeoutMinutes));
         orderMapper.insert(order);

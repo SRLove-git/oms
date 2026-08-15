@@ -56,7 +56,7 @@ class PaymentServiceTest {
         });
 
         CreatePaymentResponse response = paymentService.create(
-                new CreatePaymentRequest("O001", new BigDecimal("100.00"), "CNY", "mock", 1L));
+                new CreatePaymentRequest("O001", new BigDecimal("100.00"), "SGD", "mock", 1L));
 
         assertThat(response.paymentNo()).isNotBlank();
         assertThat(response.channel()).isEqualTo("mock");
@@ -67,7 +67,7 @@ class PaymentServiceTest {
     @Test
     void createShouldRejectNonMockChannelInMockOnlyMode() {
         assertThatThrownBy(() -> paymentService.create(
-                        new CreatePaymentRequest("O001", new BigDecimal("100.00"), "CNY", "wechat", 1L)))
+                        new CreatePaymentRequest("O001", new BigDecimal("100.00"), "SGD", "wechat", 1L)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("仅支持 mock 渠道");
         verify(transactionMapper, never()).insert(any(PaymentTransaction.class));
@@ -82,7 +82,7 @@ class PaymentServiceTest {
         });
 
         CreatePaymentResponse response = paymentService.create(
-                new CreatePaymentRequest("O001", new BigDecimal("100.00"), "CNY", null, 1L));
+                new CreatePaymentRequest("O001", new BigDecimal("100.00"), "SGD", null, 1L));
 
         assertThat(response.channel()).isEqualTo("mock");
         verify(transactionMapper).insert(any(PaymentTransaction.class));
@@ -93,7 +93,7 @@ class PaymentServiceTest {
         setField(paymentService, "mockOnly", false);
 
         assertThatThrownBy(() -> paymentService.create(
-                        new CreatePaymentRequest("O001", new BigDecimal("100.00"), "CNY", "unknown", 1L)))
+                        new CreatePaymentRequest("O001", new BigDecimal("100.00"), "SGD", "unknown", 1L)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("暂不支持该支付渠道");
         verify(transactionMapper, never()).insert(any(PaymentTransaction.class));
@@ -105,7 +105,7 @@ class PaymentServiceTest {
         when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(existing);
 
         CreatePaymentResponse response = paymentService.create(
-                new CreatePaymentRequest("O001", new BigDecimal("100.00"), "CNY", "mock", 1L));
+                new CreatePaymentRequest("O001", new BigDecimal("100.00"), "SGD", "mock", 1L));
 
         assertThat(response.paymentNo()).isEqualTo("P001");
         assertThat(response.channel()).isEqualTo("mock");
@@ -118,7 +118,7 @@ class PaymentServiceTest {
         when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(transaction(2));
 
         assertThatThrownBy(() -> paymentService.create(
-                        new CreatePaymentRequest("O001", new BigDecimal("100.00"), "CNY", "mock", 1L)))
+                        new CreatePaymentRequest("O001", new BigDecimal("100.00"), "SGD", "mock", 1L)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("已支付");
         verify(transactionMapper, never()).insert(any(PaymentTransaction.class));
@@ -265,7 +265,7 @@ class PaymentServiceTest {
         tx.setOrderNo("O001");
         tx.setChannel("mock");
         tx.setAmount(new BigDecimal("100.00"));
-        tx.setCurrency("CNY");
+        tx.setCurrency("SGD");
         tx.setStatus(status);
         tx.setNotifyCount(0);
         return tx;

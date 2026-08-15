@@ -20,11 +20,11 @@
         </div>
         <div class="app-cell">
           <span class="app-cell-label">{{ t('orders.totalAmount') }}</span>
-          <span class="app-cell-value">¥{{ formatPrice(order.totalAmount) }}</span>
+          <span class="app-cell-value">S${{ formatPrice(order.totalAmount) }}</span>
         </div>
         <div class="app-cell">
           <span class="app-cell-label">{{ t('orders.payAmount') }}</span>
-          <span class="app-cell-value text-price">¥{{ formatPrice(order.payAmount) }}</span>
+          <span class="app-cell-value text-price">S${{ formatPrice(order.payAmount) }}</span>
         </div>
         <div v-if="order.remark" class="app-cell">
           <span class="app-cell-label">{{ t('checkout.remark') }}</span>
@@ -37,9 +37,9 @@
         <div v-for="item in order.items" :key="item.id" class="order-item">
           <div class="order-item-main">
             <div class="order-item-name">{{ item.skuName }}</div>
-            <div class="text-muted">¥{{ formatPrice(item.unitPrice) }} × {{ item.quantity }}</div>
+            <div class="text-muted">S${{ formatPrice(item.unitPrice) }} × {{ item.quantity }}</div>
           </div>
-          <div class="text-price">¥{{ formatPrice(item.totalPrice) }}</div>
+          <div class="text-price">S${{ formatPrice(item.totalPrice) }}</div>
         </div>
       </div>
 

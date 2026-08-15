@@ -29,7 +29,7 @@
         </div>
         <div class="app-list-item-row">
           <span>{{ t('aftersales.amount') }}</span>
-          <span class="text-price">¥{{ formatPrice(item.totalAmount) }}</span>
+          <span class="text-price">S${{ formatPrice(item.totalAmount) }}</span>
         </div>
         <div class="app-list-item-row">
           <span>{{ t('aftersales.applyTime') }}</span>

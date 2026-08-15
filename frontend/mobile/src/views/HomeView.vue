@@ -19,7 +19,7 @@
           <div class="sku-card-name">{{ sku.name }}</div>
           <div class="sku-card-spec">{{ sku.spec || sku.skuNo }}</div>
           <div class="sku-card-footer">
-            <span class="sku-card-price">¥{{ formatPrice(sku.price) }}</span>
+            <span class="sku-card-price">S${{ formatPrice(sku.price) }}</span>
             <a-tag
               class="sku-card-status"
               :color="sku.status === 1 ? 'green' : 'gray'"

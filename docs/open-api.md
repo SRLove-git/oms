@@ -119,7 +119,7 @@ oms:
     "orderType": 2,
     "status": 1,
     "totalAmount": 199.0,
-    "currency": "CNY",
+    "currency": "SGD",
     "remark": "商城订单",
     "paidAt": null,
     "createdAt": "2026-08-14T12:00:01",

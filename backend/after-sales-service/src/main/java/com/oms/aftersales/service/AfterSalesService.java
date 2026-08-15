@@ -42,11 +42,15 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AfterSalesService {
+
+    @Value("${oms.aftersales.currency:SGD}")
+    private String defaultCurrency;
 
     private static final Logger log = LoggerFactory.getLogger(AfterSalesService.class);
 
@@ -264,7 +268,7 @@ public class AfterSalesService {
         record.setOrderId(returnOrder.getOrderId());
         record.setPaymentNo(request.paymentNo());
         record.setAmount(request.amount() == null ? returnOrder.getTotalAmount() : request.amount());
-        record.setCurrency("CNY");
+        record.setCurrency(defaultCurrency);
         record.setMethod(request.method() == null ? 1 : request.method());
         record.setStatus(3);
         record.setChannelTxnNo("REF-" + System.currentTimeMillis());

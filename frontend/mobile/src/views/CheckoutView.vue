@@ -12,7 +12,7 @@
         </div>
         <div class="app-cell">
           <span class="app-cell-label">{{ t('checkout.payAmount') }}</span>
-          <span class="app-cell-value text-price">¥{{ formatPrice(createdOrder.payAmount) }}</span>
+          <span class="app-cell-value text-price">S${{ formatPrice(createdOrder.payAmount) }}</span>
         </div>
         <a-button class="app-primary-btn mt-12" type="primary" long @click="openPay">
           {{ t('checkout.goPay') }}
@@ -30,8 +30,8 @@
             <div class="text-muted">{{ sku.spec || sku.skuNo }}</div>
           </div>
           <div class="text-right">
-            <div>¥{{ formatPrice(sku.price) }} × {{ quantity }}</div>
-            <div class="text-price">¥{{ totalAmount }}</div>
+            <div>S${{ formatPrice(sku.price) }} × {{ quantity }}</div>
+            <div class="text-price">S${{ totalAmount }}</div>
           </div>
         </div>
       </div>
@@ -48,7 +48,7 @@
         </div>
         <div class="app-cell">
           <span class="app-cell-label">{{ t('checkout.totalAmount') }}</span>
-          <span class="app-cell-value text-price">¥{{ totalAmount }}</span>
+          <span class="app-cell-value text-price">S${{ totalAmount }}</span>
         </div>
       </div>
 
@@ -70,7 +70,7 @@
   >
     <div>{{ t('payment.content', { paymentNo: payInfo?.paymentNo ?? '-' }) }}</div>
     <div class="mt-8">
-      {{ t('payment.amount') }}：<span class="text-price">¥{{ payAmountText }}</span>
+      {{ t('payment.amount') }}：<span class="text-price">S${{ payAmountText }}</span>
     </div>
   </a-modal>
 </template>
