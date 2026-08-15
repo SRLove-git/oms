@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# OMS 商城开放 API 冒烟：验签 → 商品/库存查询 → 下单(幂等) → 查单 → 取消
+# OMS 商城开放 API 冒烟：验签 → 商品/库存查询 → 下单(幂等) → 支付成功通知(幂等+金额校验) → 查单/取消
 # 前置：网关与 order/inventory 服务已启动；默认客户端 demo-mall（见 docs/open-api.md）
 # 用法：GATEWAY_URL=http://localhost:8080 ./scripts/open-api-smoke.sh
 
@@ -101,24 +101,65 @@ if [[ -n "$SKU_ID" ]]; then
   fi
 
   log ''
-  log '== 4. 查单与取消 =='
+  log '== 4. 支付成功通知（幂等 + 金额校验）=='
   QUERY=$(open_api GET "/api/v1/open/orders/$EXTERNAL_NO")
-  if printf '%s' "$QUERY" | json_val code | grep -q '^0$'; then
-    pass '按外部订单号查单成功'
-  else
+  if ! printf '%s' "$QUERY" | json_val code | grep -q '^0$'; then
     fail "查单失败: $QUERY"
   fi
+  # 取订单应付金额构造通知体
+  PAY_AMOUNT=$(printf '%s' "$QUERY" | json_val data.totalAmount 2>/dev/null || printf '199.00')
+  PAYMENT_NO="MP-$(date +%s)"
+  NOTIFY_BODY=$(printf '{"paymentNo":"%s","amount":%s,"channel":"wechat","channelTxnNo":"TXN-%s"}' "$PAYMENT_NO" "$PAY_AMOUNT" "$PAYMENT_NO")
 
-  CANCEL=$(open_api POST "/api/v1/open/orders/$EXTERNAL_NO/cancel" '{}')
-  if printf '%s' "$CANCEL" | json_val code | grep -q '^0$'; then
-    pass '取消订单成功'
+  NOTIFY=$(open_api POST "/api/v1/open/orders/$EXTERNAL_NO/payment-notify" "$NOTIFY_BODY")
+  if printf '%s' "$NOTIFY" | json_val code | grep -q '^0$' && printf '%s' "$NOTIFY" | json_val data.status | grep -q '^2$'; then
+    pass '支付成功通知：订单已支付(status=2)'
   else
-    fail "取消订单失败: $CANCEL"
+    fail "支付成功通知失败: $NOTIFY"
+  fi
+
+  NOTIFY_AGAIN=$(open_api POST "/api/v1/open/orders/$EXTERNAL_NO/payment-notify" "$NOTIFY_BODY")
+  if printf '%s' "$NOTIFY_AGAIN" | json_val code | grep -q '^0$' && printf '%s' "$NOTIFY_AGAIN" | json_val data.status | grep -q '^2$'; then
+    pass '重复支付通知幂等（返回同一订单）'
+  else
+    fail "重复支付通知非幂等: $NOTIFY_AGAIN"
+  fi
+
+  BAD_AMOUNT_BODY=$(printf '{"paymentNo":"MP-BAD-%s","amount":0.01}' "$(date +%s)")
+  BAD_NOTIFY=$(open_api POST "/api/v1/open/orders/$EXTERNAL_NO/payment-notify" "$BAD_AMOUNT_BODY")
+  if printf '%s' "$BAD_NOTIFY" | json_val code | grep -q '^409$'; then
+    pass '金额不一致通知被拒绝（409）'
+  else
+    fail "金额不一致未被拒绝: $BAD_NOTIFY"
+  fi
+
+  log ''
+  log '== 5. 查单与取消 =='
+  QUERY_PAID=$(open_api GET "/api/v1/open/orders/$EXTERNAL_NO")
+  if printf '%s' "$QUERY_PAID" | json_val data.status | grep -q '^2$'; then
+    pass '查单确认已支付状态'
+  else
+    fail "查单状态异常: $QUERY_PAID"
+  fi
+
+  # 另下一单验证取消链路（已支付订单不可取消）
+  EXTERNAL_NO_2="MALL-CANCEL-$(date +%s)"
+  ORDER_BODY_2=$(printf '{"externalOrderNo":"%s","orderType":2,"remark":"取消冒烟","items":[{"skuId":%s,"quantity":1}]}' "$EXTERNAL_NO_2" "$SKU_ID")
+  CANCEL_CREATE=$(open_api POST '/api/v1/open/orders' "$ORDER_BODY_2")
+  if printf '%s' "$CANCEL_CREATE" | json_val code | grep -q '^0$'; then
+    CANCEL=$(open_api POST "/api/v1/open/orders/$EXTERNAL_NO_2/cancel" '{}')
+    if printf '%s' "$CANCEL" | json_val code | grep -q '^0$'; then
+      pass '待支付订单取消成功'
+    else
+      fail "取消订单失败: $CANCEL"
+    fi
+  else
+    fail "取消用例下单失败: $CANCEL_CREATE"
   fi
 fi
 
 log ''
-log '== 5. 非法签名拒绝 =='
+log '== 6. 非法签名拒绝 =='
 BAD=$(curl -s -X GET "$GATEWAY/api/v1/open/products" \
   -H 'Content-Type: application/json' \
   -H 'X-App-Id: demo-mall' -H "X-Timestamp: $(date +%s)" \

@@ -21,6 +21,17 @@ public final class OpenOrderDtos {
             List<OrderItemRequest> items) {
     }
 
+    /**
+     * 商城支付成功通知：商城侧收款完成后回调 OMS，订单由待支付推进为已支付并扣减库存。
+     */
+    public record OpenPaymentNotifyRequest(
+            String paymentNo,
+            BigDecimal amount,
+            String channel,
+            String channelTxnNo,
+            LocalDateTime paidAt) {
+    }
+
     public record OpenOrderResponse(
             String orderNo,
             String externalOrderNo,

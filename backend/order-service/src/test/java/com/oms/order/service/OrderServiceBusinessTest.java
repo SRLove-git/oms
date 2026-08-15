@@ -23,6 +23,8 @@ import com.oms.order.dto.OrderDtos.CancelRequest;
 import com.oms.order.dto.OrderDtos.CreateOrderRequest;
 import com.oms.order.dto.OrderDtos.OrderItemRequest;
 import com.oms.order.dto.OrderDtos.PaymentSuccessRequest;
+import com.oms.order.dto.OpenOrderDtos.OpenOrderResponse;
+import com.oms.order.dto.OpenOrderDtos.OpenPaymentNotifyRequest;
 import com.oms.order.entity.Order;
 import com.oms.order.entity.OrderItem;
 import com.oms.order.entity.OrderLog;
@@ -424,6 +426,108 @@ class OrderServiceBusinessTest {
 
         verify(inventoryClient, never()).release(any());
         verify(orderMapper, never()).updateById(any(Order.class));
+    }
+
+    // ---------- 商城支付成功通知 ----------
+
+    @Test
+    void notifyPaymentSuccessShouldTransitionRecordAndDeduct() {
+        Order order = order(OrderStatus.PENDING_PAYMENT);
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
+        when(orderMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(orderItemMapper.selectList(any(Wrapper.class))).thenReturn(List.of(orderItem(1L, 2)));
+        when(inventoryClient.deduct(any())).thenReturn(Result.ok());
+
+        OpenOrderResponse response = orderService.notifyPaymentSuccess(
+                "M1", new OpenPaymentNotifyRequest("MP001", new BigDecimal("100.00"), "wechat", "TXN1", null), 1L);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(order.getPaidAt()).isNotNull();
+        assertThat(response.externalOrderNo()).isNull();
+        ArgumentCaptor<OrderPayment> paymentCaptor = ArgumentCaptor.forClass(OrderPayment.class);
+        verify(orderPaymentMapper).insert(paymentCaptor.capture());
+        assertThat(paymentCaptor.getValue().getPaymentNo()).isEqualTo("MP001");
+        assertThat(paymentCaptor.getValue().getChannel()).isEqualTo("wechat");
+        assertThat(paymentCaptor.getValue().getStatus()).isEqualTo(2);
+        verify(orderLogMapper).insert(any(OrderLog.class));
+        verify(inventoryClient).deduct(any());
+    }
+
+    @Test
+    void notifyPaymentSuccessShouldBeIdempotentOnRepeat() {
+        Order order = order(OrderStatus.PENDING_PAYMENT);
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
+        when(orderMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(orderItemMapper.selectList(any(Wrapper.class))).thenReturn(List.of(orderItem(1L, 2)));
+        when(inventoryClient.deduct(any())).thenReturn(Result.ok());
+
+        orderService.notifyPaymentSuccess(
+                "M1", new OpenPaymentNotifyRequest("MP001", new BigDecimal("100.00"), null, null, null), 1L);
+        orderService.notifyPaymentSuccess(
+                "M1", new OpenPaymentNotifyRequest("MP001", new BigDecimal("100.00"), null, null, null), 1L);
+
+        verify(orderMapper, times(1)).update(isNull(), any(Wrapper.class));
+        verify(orderLogMapper, times(1)).insert(any(OrderLog.class));
+        verify(inventoryClient, times(1)).deduct(any());
+    }
+
+    @Test
+    void notifyPaymentSuccessShouldRejectAmountMismatch() {
+        Order order = order(OrderStatus.PENDING_PAYMENT);
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
+
+        assertThatThrownBy(() -> orderService.notifyPaymentSuccess(
+                        "M1", new OpenPaymentNotifyRequest("MP001", new BigDecimal("99.00"), null, null, null), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("金额");
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
+        verify(orderMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(inventoryClient, never()).deduct(any());
+    }
+
+    @Test
+    void notifyPaymentSuccessShouldRejectCancelledOrder() {
+        Order order = order(OrderStatus.CANCELLED);
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
+
+        assertThatThrownBy(() -> orderService.notifyPaymentSuccess(
+                        "M1", new OpenPaymentNotifyRequest("MP001", new BigDecimal("100.00"), null, null, null), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已取消");
+        verify(inventoryClient, never()).deduct(any());
+    }
+
+    @Test
+    void notifyPaymentSuccessShouldRejectUnknownOrder() {
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+
+        assertThatThrownBy(() -> orderService.notifyPaymentSuccess(
+                        "M1", new OpenPaymentNotifyRequest("MP001", new BigDecimal("100.00"), null, null, null), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("外部订单不存在");
+    }
+
+    @Test
+    void notifyPaymentSuccessShouldRequirePaymentNo() {
+        assertThatThrownBy(() -> orderService.notifyPaymentSuccess(
+                        "M1", new OpenPaymentNotifyRequest("", new BigDecimal("100.00"), null, null, null), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("paymentNo");
+    }
+
+    @Test
+    void notifyPaymentSuccessShouldRejectOtherMerchant() {
+        Order order = order(OrderStatus.PENDING_PAYMENT);
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
+
+        assertThatThrownBy(() -> orderService.notifyPaymentSuccess(
+                        "M1", new OpenPaymentNotifyRequest("MP001", new BigDecimal("100.00"), null, null, null), 2L))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getCode()).isEqualTo(ErrorCode.FORBIDDEN.getCode());
+                    assertThat(ex.getMessage()).isEqualTo("无权限访问");
+                });
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
     }
 
     private Order order(int status) {

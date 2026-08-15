@@ -113,10 +113,10 @@ pnpm dev
 - 移动端 H5：[frontend/mobile/](./frontend/mobile/)（商品搜索/详情/下单/支付、订单状态操作、售后申请、我的；5175 端口）
 - OpenAPI 文档：全服务 springdoc，网关聚合 Swagger UI `http://localhost:8080/swagger-ui.html`（免认证）
 - Sentinel 流控：网关路由/API 分组限流（下单 300 QPS、支付回调 1000 QPS 等）+ 订单/支付核心方法 `@SentinelResource` 限流与 RT 降级（详见 `docs/adr/0003-open-api-and-traffic-control.md`）
-- 商城对接开放 API：`/api/v1/open/**`（HMAC 签名 + 防重放 + appId→商户映射；商品/库存查询、幂等下单、查单、取消），文档 [docs/open-api.md](./docs/open-api.md)，冒烟 `scripts/open-api-smoke.sh`；状态反馈当前为**查单轮询**，回调订阅协议已预留（见文档第 7 节，下一迭代实施）
+- 商城对接开放 API：`/api/v1/open/**`（HMAC 签名 + 防重放 + appId→商户映射；商品/库存查询、幂等下单、支付成功通知、查单、取消），文档 [docs/open-api.md](./docs/open-api.md)，冒烟 `scripts/open-api-smoke.sh`；状态反馈当前为**查单轮询**，回调订阅协议已预留（见文档第 7 节，下一迭代实施）
 - 核心链路加固：取消/超时/支付回调条件状态流转防并发覆盖，回调金额校验，支付单幂等覆盖已支付态，退款金额校验（详见 `docs/adr/0003`）
 - 前端测试：管理端/门户端/移动端接入 Vitest（组件/状态/i18n 用例，共 27 例）
-- 后端测试补强：订单/库存/支付核心链路单测扩充（订单 28、库存 14、支付 17、网关 7，全量 76 用例通过）
+- 后端测试补强：订单/库存/支付核心链路单测扩充（订单 35、库存 14、支付 17、网关 7，全量 83 用例通过）
 
 ## 文档
 

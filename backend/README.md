@@ -134,6 +134,7 @@ mvn -pl oms-gateway,user-service,order-service,inventory-service,after-sales-ser
 | GET | `/api/v1/open/skus/{skuId}/stock` | 实时库存 |
 | POST | `/api/v1/open/orders` | 下单（以 `externalOrderNo` 幂等） |
 | GET | `/api/v1/open/orders/{externalOrderNo}` | 按外部订单号查单（自动回落归档表） |
+| POST | `/api/v1/open/orders/{externalOrderNo}/payment-notify` | 商城收款完成后的支付成功通知（金额强校验 + 幂等 + 库存扣减） |
 | POST | `/api/v1/open/orders/{externalOrderNo}/cancel` | 取消待支付订单（释放库存） |
 
 签名方案、客户端配置与冒烟脚本见 `docs/open-api.md` 与 `scripts/open-api-smoke.sh`。

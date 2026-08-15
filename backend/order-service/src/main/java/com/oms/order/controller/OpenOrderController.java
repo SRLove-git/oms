@@ -3,6 +3,7 @@ package com.oms.order.controller;
 import com.oms.common.core.result.Result;
 import com.oms.order.dto.OpenOrderDtos.OpenCreateOrderRequest;
 import com.oms.order.dto.OpenOrderDtos.OpenOrderResponse;
+import com.oms.order.dto.OpenOrderDtos.OpenPaymentNotifyRequest;
 import com.oms.order.service.OrderService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -51,5 +52,13 @@ public class OpenOrderController {
             @RequestHeader(value = "X-Merchant-Id", required = false) Long merchantId) {
         orderService.cancelOpen(externalOrderNo, merchantId);
         return Result.ok();
+    }
+
+    @PostMapping("/{externalOrderNo}/payment-notify")
+    public Result<OpenOrderResponse> paymentNotify(
+            @PathVariable String externalOrderNo,
+            @RequestBody OpenPaymentNotifyRequest request,
+            @RequestHeader(value = "X-Merchant-Id", required = false) Long merchantId) {
+        return Result.ok(orderService.notifyPaymentSuccess(externalOrderNo, request, merchantId));
     }
 }

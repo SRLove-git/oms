@@ -90,6 +90,7 @@ oms:
 | :--- | :--- | :--- |
 | POST | `/api/v1/open/orders` | 下单（幂等，`externalOrderNo` 唯一） |
 | GET | `/api/v1/open/orders/{externalOrderNo}` | 按外部订单号查单（含明细；归档单自动回落冷表） |
+| POST | `/api/v1/open/orders/{externalOrderNo}/payment-notify` | 商城收款完成后的**支付成功通知**（订单待支付 → 已支付 + 库存扣减） |
 | POST | `/api/v1/open/orders/{externalOrderNo}/cancel` | 取消待支付订单（自动释放库存） |
 
 下单请求体：
@@ -129,10 +130,48 @@ oms:
 
 订单状态：`1-待支付 2-已支付 3-已审核 4-已发货 5-已签收 6-已完成 7-已取消`（与内部口径一致）。
 
+### 4.3 支付成功通知（商城收款 → OMS）
+
+商城面向终端客户自行收款（微信/支付宝/余额等，渠道由商城决定），收款成功后调用本接口通知 OMS，OMS 将订单推进为已支付并完成库存物理扣减。
+
+```http
+POST /api/v1/open/orders/{externalOrderNo}/payment-notify
+Content-Type: application/json
+X-App-Id: demo-mall
+X-Timestamp: ...
+X-Nonce: ...
+X-Sign: ...
+
+{
+  "paymentNo": "MP20260814001",
+  "amount": 199.00,
+  "channel": "wechat",
+  "channelTxnNo": "4200001234567890",
+  "paidAt": "2026-08-14T12:05:00"
+}
+```
+
+| 字段 | 必填 | 说明 |
+| :--- | :--- | :--- |
+| `paymentNo` | 是 | 商城支付流水号，全局唯一，作为幂等键 |
+| `amount` | 是 | 实收金额，必须与订单应付金额一致，否则 409 |
+| `channel` | 否 | 商城收款渠道（wechat/alipay/balance 等），默认 `OPEN_API` |
+| `channelTxnNo` | 否 | 渠道交易号（对账用） |
+| `paidAt` | 否 | 支付完成时间，默认服务器当前时间 |
+
+行为约定：
+
+- **幂等**：同一 `paymentNo` 或订单已处于已支付及之后状态时，重复通知直接返回当前订单，不重复扣减库存。
+- **金额校验**：通知金额与订单应付金额不一致 → 409 拒绝并告警，订单保持待支付（超时自动取消释放库存）。
+- **状态约束**：已取消订单不可支付（409）；待支付之外且未取消的订单视为重复通知幂等处理。
+- **库存联动**：通知成功后按 FEFO 完成库存扣减并记录流水；支付记录写入 `order_payment`（`channel` 按上述规则），来源 `source=OPEN_API` 便于报表区分。
+- 商城侧收款失败/用户放弃支付时，无需通知 OMS；订单按超时策略自动取消并释放库存。
+
 ## 5. 行为约定
 
 - **幂等下单**：同一 `externalOrderNo` 重复提交返回首次创建的订单；并发重复由 `uk_external_order_no` 唯一索引兜底，重复单自动回滚并释放库存。
-- **租户隔离**：查单/取消校验订单 `merchant_id` 与 appId 映射的商户一致，不一致返回 403。
+- **支付由商城发起**：OMS 不向商城开放支付发起接口，商城自行收款后经 `payment-notify` 通知（见 4.3），通知幂等、金额强校验。
+- **租户隔离**：查单/取消/支付通知校验订单 `merchant_id` 与 appId 映射的商户一致，不一致返回 403。
 - **审计**：开放 API 产生的订单状态流转，操作人统一记为 `OPEN_API`，全程进入订单日志。
 - **状态只读反馈（当前口径）**：发货、签收、退款等结果由 OMS 内部流程驱动，商城侧通过查单接口（`GET /api/v1/open/orders/{externalOrderNo}`）**轮询获取**；建议轮询间隔 ≥ 5 秒，配合订单状态与 `paidAt`/日志时间线判断增量。**回调订阅为下一迭代规划，协议见第 7 节，双方按该契约预留，未实施前不得依赖回调。**
 
@@ -153,7 +192,7 @@ oms:
 
 | 事件 | 触发点 | payload 关键字段 |
 | :--- | :--- | :--- |
-| `order.paid` | 支付成功回调处理完成 | `orderNo`、`externalOrderNo`、`paidAt`、`payAmount` |
+| `order.paid` | 支付成功回调 / 商城支付成功通知处理完成 | `orderNo`、`externalOrderNo`、`paidAt`、`payAmount` |
 | `order.audited` | 审核通过 | `orderNo`、`externalOrderNo`、`auditedAt` |
 | `order.shipped` | 发货 | `orderNo`、`externalOrderNo`、`trackingNo`、`carrier`、`shippedAt` |
 | `order.signed` | 签收 | `orderNo`、`externalOrderNo`、`signedAt` |
@@ -177,7 +216,7 @@ oms:
 
 ### 7.4 实施要点（后端预留位）
 
-- 订单状态机各流转点（`OrderService`）发出事件写入回调队列表（outbox，如 `open_api_event`：`event_id/event/app_id/order_no/payload/status/retry_count/next_retry_at`）。
+- 订单状态机各流转点（`OrderService`）发出事件写入回调队列表（outbox，如 `open_api_event`：`event_id/event/app_id/order_no/payload/status/retry_count/next_retry_at`）；其中 `order.paid` 事件由支付成功回调与商城 `payment-notify` 两个入口共同触发。
 - 定时任务扫描待投递事件，签名后 POST 回调地址，成功置终态、失败退避重试。
 - 与订单日志共用流转钩子，保证事件不漏发（订单完成/取消为终态事件，退款事件由 payment-center 联动 after-sales 发出）。
 - 建议表结构与配置项在实施迭代内以 Flyway 迁移落地，不进本次交付。

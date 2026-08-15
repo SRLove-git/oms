@@ -24,6 +24,7 @@ import com.oms.order.dto.OrderDtos.PaymentSuccessRequest;
 import com.oms.order.dto.OrderDtos.ShipRequest;
 import com.oms.order.dto.OpenOrderDtos.OpenCreateOrderRequest;
 import com.oms.order.dto.OpenOrderDtos.OpenOrderResponse;
+import com.oms.order.dto.OpenOrderDtos.OpenPaymentNotifyRequest;
 import com.oms.order.entity.Order;
 import com.oms.order.entity.OrderArchive;
 import com.oms.order.entity.OrderItem;
@@ -204,6 +205,88 @@ public class OrderService {
         }
         requireMerchant(order.getMerchantId(), merchantId);
         cancel(order.getOrderNo(), new CancelRequest("商城取消"), null, "OPEN_API", null);
+    }
+
+    /**
+     * 商城支付成功通知：商城侧收款完成后通知 OMS，订单待支付 → 已支付并扣减库存。
+     *
+     * <ul>
+     *   <li>幂等：重复通知（同一支付单号或已支付状态）返回当前订单，不重复扣减；</li>
+     *   <li>金额校验：通知金额必须与订单应付金额一致，不一致拒绝并告警；</li>
+     *   <li>并发安全：条件状态流转，与超时取消互斥。</li>
+     * </ul>
+     */
+    @Transactional
+    public OpenOrderResponse notifyPaymentSuccess(
+            String externalOrderNo, OpenPaymentNotifyRequest request, Long merchantId) {
+        if (request.paymentNo() == null || request.paymentNo().isBlank()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "paymentNo 不能为空");
+        }
+        Order order = findByExternalOrderNo(externalOrderNo);
+        if (order == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "外部订单不存在");
+        }
+        requireMerchant(order.getMerchantId(), merchantId);
+
+        int status = order.getStatus();
+        if (status == OrderStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "订单已取消，不能支付");
+        }
+        if (status != OrderStatus.PENDING_PAYMENT) {
+            // 已支付及之后状态：重复通知幂等返回当前订单
+            return toOpenResponse(order, loadItems(order.getId()));
+        }
+        if (request.amount() == null || request.amount().compareTo(order.getPayAmount()) != 0) {
+            log.error("商城支付通知金额不一致，拒绝 orderNo={} expect={} actual={}",
+                    order.getOrderNo(), order.getPayAmount(), request.amount());
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "支付金额与订单应付金额不一致");
+        }
+
+        LocalDateTime paidAt = request.paidAt() == null ? LocalDateTime.now() : request.paidAt();
+        if (!transitIfStatus(order.getId(), OrderStatus.PENDING_PAYMENT, OrderStatus.PAID, paidAt)) {
+            Order fresh = findOrder(order.getOrderNo());
+            if (fresh.getStatus() != OrderStatus.PENDING_PAYMENT && fresh.getStatus() != OrderStatus.CANCELLED) {
+                return toOpenResponse(fresh, loadItems(fresh.getId()));
+            }
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "订单状态已变化，请刷新后重试");
+        }
+        order.setStatus(OrderStatus.PAID);
+        order.setPaidAt(paidAt);
+        appendLog(order.getId(), OrderStatus.PENDING_PAYMENT, OrderStatus.PAID, null, "OPEN_API", "商城支付成功通知");
+        recordOpenPayment(order, request);
+
+        try {
+            inventoryClient.deduct(itemsAsStockRequest(order.getOrderNo(), order.getId()));
+        } catch (Exception ex) {
+            log.error("商城支付通知后库存扣减失败 orderNo={}", order.getOrderNo(), ex);
+        }
+        return toOpenResponse(order, loadItems(order.getId()));
+    }
+
+    /**
+     * 记录商城支付单（支付单号唯一，重复插入幂等忽略）。
+     */
+    private void recordOpenPayment(Order order, OpenPaymentNotifyRequest request) {
+        Long exists = orderPaymentMapper.selectCount(new LambdaQueryWrapper<OrderPayment>()
+                .eq(OrderPayment::getPaymentNo, request.paymentNo()));
+        if (exists > 0) {
+            return;
+        }
+        OrderPayment payment = new OrderPayment();
+        payment.setOrderId(order.getId());
+        payment.setPaymentNo(request.paymentNo());
+        payment.setChannel(request.channel() == null || request.channel().isBlank()
+                ? "OPEN_API" : request.channel());
+        payment.setAmount(order.getPayAmount());
+        payment.setCurrency(order.getCurrency());
+        payment.setStatus(2);
+        payment.setChannelTxnNo(request.channelTxnNo());
+        payment.setPaidAt(order.getPaidAt());
+        try {
+            orderPaymentMapper.insert(payment);
+        } catch (DuplicateKeyException ex) {
+            log.info("商城支付单重复插入，忽略 paymentNo={}", request.paymentNo());
+        }
     }
 
     private OrderResponse persistOrder(
