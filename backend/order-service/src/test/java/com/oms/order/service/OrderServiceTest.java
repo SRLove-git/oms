@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.oms.common.core.result.Result;
 import com.oms.order.client.InventoryClient;
+import com.oms.order.client.MallCallbackNotifier;
 import com.oms.order.client.PaymentClient;
 import com.oms.order.client.SkuInfo;
 import com.oms.order.constant.OrderStatus;
@@ -36,6 +37,7 @@ class OrderServiceTest {
     private OrderLogMapper orderLogMapper;
     private InventoryClient inventoryClient;
     private PaymentClient paymentClient;
+    private MallCallbackNotifier mallCallbackNotifier;
     private OrderArchiveService orderArchiveService;
     private OrderService orderService;
 
@@ -47,6 +49,7 @@ class OrderServiceTest {
         orderLogMapper = mock(OrderLogMapper.class);
         inventoryClient = mock(InventoryClient.class);
         paymentClient = mock(PaymentClient.class);
+        mallCallbackNotifier = mock(MallCallbackNotifier.class);
         orderArchiveService = mock(OrderArchiveService.class);
         orderService = new OrderService(
                 orderMapper,
@@ -55,6 +58,7 @@ class OrderServiceTest {
                 orderLogMapper,
                 inventoryClient,
                 paymentClient,
+                mallCallbackNotifier,
                 orderArchiveService);
         setField(orderService, "timeoutMinutes", 30L);
         setField(orderService, "defaultCurrency", "SGD");

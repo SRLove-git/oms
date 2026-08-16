@@ -30,6 +30,9 @@ class OrderStatusTest {
         // 已发货/已签收 -> 售后介入
         assertThat(OrderStatus.canTransit(OrderStatus.SHIPPED, OrderStatus.AFTER_SALES)).isTrue();
         assertThat(OrderStatus.canTransit(OrderStatus.SIGNED, OrderStatus.AFTER_SALES)).isTrue();
+        assertThat(OrderStatus.canTransit(OrderStatus.PAID, OrderStatus.AFTER_SALES)).isTrue();
+        assertThat(OrderStatus.canTransit(OrderStatus.AUDITED, OrderStatus.AFTER_SALES)).isTrue();
+        assertThat(OrderStatus.canTransit(OrderStatus.COMPLETED, OrderStatus.AFTER_SALES)).isTrue();
         // 售后处理中 -> 完成 / 取消
         assertThat(OrderStatus.canTransit(OrderStatus.AFTER_SALES, OrderStatus.COMPLETED)).isTrue();
         assertThat(OrderStatus.canTransit(OrderStatus.AFTER_SALES, OrderStatus.CANCELLED)).isTrue();
@@ -43,8 +46,7 @@ class OrderStatusTest {
         assertThat(OrderStatus.canTransit(OrderStatus.AUDITED, OrderStatus.COMPLETED)).isFalse();
         assertThat(OrderStatus.canTransit(OrderStatus.SHIPPED, OrderStatus.COMPLETED)).isFalse();
         assertThat(OrderStatus.canTransit(OrderStatus.SIGNED, OrderStatus.CANCELLED)).isFalse();
-        // 终态不可再流转
-        assertThat(OrderStatus.canTransit(OrderStatus.COMPLETED, OrderStatus.AFTER_SALES)).isFalse();
+        // 取消态不可再流转
         assertThat(OrderStatus.canTransit(OrderStatus.CANCELLED, OrderStatus.PENDING_PAYMENT)).isFalse();
         assertThat(OrderStatus.canTransit(OrderStatus.CANCELLED, OrderStatus.PAID)).isFalse();
         // 未知状态

@@ -16,6 +16,7 @@ import com.oms.common.core.exception.BusinessException;
 import com.oms.common.core.result.ErrorCode;
 import com.oms.common.core.result.Result;
 import com.oms.order.client.InventoryClient;
+import com.oms.order.client.MallCallbackNotifier;
 import com.oms.order.client.PaymentClient;
 import com.oms.order.client.SkuInfo;
 import com.oms.order.constant.OrderStatus;
@@ -50,6 +51,7 @@ class OrderServiceBusinessTest {
     private OrderLogMapper orderLogMapper;
     private InventoryClient inventoryClient;
     private PaymentClient paymentClient;
+    private MallCallbackNotifier mallCallbackNotifier;
     private OrderArchiveService orderArchiveService;
     private OrderService orderService;
 
@@ -61,6 +63,7 @@ class OrderServiceBusinessTest {
         orderLogMapper = org.mockito.Mockito.mock(OrderLogMapper.class);
         inventoryClient = org.mockito.Mockito.mock(InventoryClient.class);
         paymentClient = org.mockito.Mockito.mock(PaymentClient.class);
+        mallCallbackNotifier = org.mockito.Mockito.mock(MallCallbackNotifier.class);
         orderArchiveService = org.mockito.Mockito.mock(OrderArchiveService.class);
         orderService = new OrderService(
                 orderMapper,
@@ -69,6 +72,7 @@ class OrderServiceBusinessTest {
                 orderLogMapper,
                 inventoryClient,
                 paymentClient,
+                mallCallbackNotifier,
                 orderArchiveService);
         setField(orderService, "timeoutMinutes", 30L);
         setField(orderService, "defaultCurrency", "SGD");

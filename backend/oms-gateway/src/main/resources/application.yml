@@ -38,7 +38,7 @@ spring:
             - id: inventory-service
               uri: lb://inventory-service
               predicates:
-                - Path=/api/v1/skus/**,/api/v1/warehouses/**,/api/v1/inventories/**,/api/v1/stock-take/**
+                - Path=/api/v1/skus/**,/api/v1/warehouses/**,/api/v1/inventories/**,/api/v1/inventory-transactions/**,/api/v1/stock-take/**
             - id: after-sales-service
               uri: lb://after-sales-service
               predicates:
@@ -75,6 +75,10 @@ spring:
               uri: lb://inventory-service
               predicates:
                 - Path=/api/v1/open/products/**,/api/v1/open/skus/**
+            - id: open-return-orders
+              uri: lb://after-sales-service
+              predicates:
+                - Path=/api/v1/open/return-orders/**
             - id: user-service-docs
               uri: lb://user-service
               predicates:

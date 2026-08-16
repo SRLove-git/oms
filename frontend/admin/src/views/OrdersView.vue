@@ -21,6 +21,7 @@ const STATUS_NAMES: Record<number, string> = {
   5: '已签收',
   6: '已完成',
   7: '已取消',
+  8: '售后处理中',
 }
 
 const loading = ref(false)

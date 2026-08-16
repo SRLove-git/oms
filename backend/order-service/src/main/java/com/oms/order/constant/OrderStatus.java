@@ -16,11 +16,11 @@ public final class OrderStatus {
 
     private static final Map<Integer, Set<Integer>> ALLOWED_TRANSITIONS = Map.of(
             PENDING_PAYMENT, Set.of(PAID, CANCELLED),
-            PAID, Set.of(AUDITED, CANCELLED),
-            AUDITED, Set.of(SHIPPED),
+            PAID, Set.of(AUDITED, CANCELLED, AFTER_SALES),
+            AUDITED, Set.of(SHIPPED, AFTER_SALES),
             SHIPPED, Set.of(SIGNED, AFTER_SALES),
             SIGNED, Set.of(COMPLETED, AFTER_SALES),
-            COMPLETED, Set.of(),
+            COMPLETED, Set.of(AFTER_SALES),
             CANCELLED, Set.of(),
             AFTER_SALES, Set.of(COMPLETED, CANCELLED));
 

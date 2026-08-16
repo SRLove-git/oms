@@ -17,6 +17,7 @@ public class ReturnOrder {
     private Long merchantId;
     private Integer type;
     private Integer status;
+    private Integer previousStatus;
     private String reason;
     private BigDecimal totalAmount;
     private Integer version;
@@ -78,6 +79,14 @@ public class ReturnOrder {
 
     public void setStatus(Integer status) {
         this.status = status;
+    }
+
+    public Integer getPreviousStatus() {
+        return previousStatus;
+    }
+
+    public void setPreviousStatus(Integer previousStatus) {
+        this.previousStatus = previousStatus;
     }
 
     public String getReason() {

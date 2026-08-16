@@ -77,9 +77,13 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         return -100;
     }
 
-    private boolean isWhitelisted(String path) {
-        return WHITELIST.stream().anyMatch(path::startsWith);
+  private boolean isWhitelisted(String path) {
+    if (WHITELIST.stream().anyMatch(path::startsWith)) {
+      return true;
     }
+    // 网关聚合 Swagger 会请求 /<service>/v3/api-docs，统一放行文档定义。
+    return path.endsWith("/v3/api-docs");
+  }
 
     private Mono<Void> unauthorized(ServerWebExchange exchange) {
         exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);

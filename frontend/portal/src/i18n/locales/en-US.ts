@@ -78,6 +78,7 @@ export default {
     status5: 'Signed',
     status6: 'Completed',
     status7: 'Cancelled',
+    status8: 'In After-sales',
   },
   products: {
     title: 'Order Products',

@@ -9,6 +9,8 @@ import com.oms.inventory.dto.SkuDtos.SkuCreateRequest;
 import com.oms.inventory.dto.SkuDtos.SkuResponse;
 import com.oms.inventory.entity.Sku;
 import com.oms.inventory.entity.Spu;
+import com.oms.inventory.client.OrderClient;
+import com.oms.inventory.mapper.InventoryMapper;
 import com.oms.inventory.mapper.SkuMapper;
 import com.oms.inventory.mapper.SpuMapper;
 import java.math.BigDecimal;
@@ -17,6 +19,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -24,10 +27,18 @@ public class SkuService {
 
     private final SkuMapper skuMapper;
     private final SpuMapper spuMapper;
+    private final InventoryMapper inventoryMapper;
+    private final OrderClient orderClient;
 
-    public SkuService(SkuMapper skuMapper, SpuMapper spuMapper) {
+    public SkuService(
+            SkuMapper skuMapper,
+            SpuMapper spuMapper,
+            InventoryMapper inventoryMapper,
+            OrderClient orderClient) {
         this.skuMapper = skuMapper;
         this.spuMapper = spuMapper;
+        this.inventoryMapper = inventoryMapper;
+        this.orderClient = orderClient;
     }
 
     public Long createSku(SkuCreateRequest request) {
@@ -75,6 +86,25 @@ public class SkuService {
         }
         sku.setStatus(status);
         skuMapper.updateById(sku);
+    }
+
+    @Transactional
+    public void delete(Long skuId) {
+        Sku sku = skuMapper.selectById(skuId);
+        if (sku == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        if (inventoryMapper.countBySkuId(skuId) > 0) {
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "该商品仍有库存记录，无法物理删除");
+        }
+        OrderClient.SkuReferenceCheck references = orderClient.skuReferences(skuId).data();
+        if (references == null || references.hasOrders()) {
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "该商品存在关联订单，无法物理删除");
+        }
+        int affected = skuMapper.deletePhysically(skuId);
+        if (affected == 0) {
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "商品删除失败，请稍后重试");
+        }
     }
 
     public SkuResponse get(Long skuId) {

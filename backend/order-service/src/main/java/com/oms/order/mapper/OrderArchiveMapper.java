@@ -131,6 +131,9 @@ public interface OrderArchiveMapper extends BaseMapper<OrderArchive> {
     @Select("SELECT * FROM order_item_archive WHERE order_id = #{orderId} ORDER BY id")
     List<OrderItem> itemsOf(@Param("orderId") Long orderId);
 
+    @Select("SELECT COUNT(*) FROM order_item_archive WHERE sku_id = #{skuId}")
+    long countItemsBySkuId(@Param("skuId") Long skuId);
+
     @Select("SELECT * FROM order_log_archive WHERE order_id = #{orderId} ORDER BY id")
     List<OrderLog> logsOf(@Param("orderId") Long orderId);
 

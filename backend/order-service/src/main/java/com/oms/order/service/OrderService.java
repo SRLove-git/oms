@@ -9,6 +9,7 @@ import com.oms.common.core.exception.BusinessException;
 import com.oms.common.core.result.ErrorCode;
 import com.oms.common.core.result.PageResult;
 import com.oms.order.client.InventoryClient;
+import com.oms.order.client.MallCallbackNotifier;
 import com.oms.order.client.PaymentClient;
 import com.oms.order.client.SkuInfo;
 import com.oms.order.constant.OrderStatus;
@@ -60,6 +61,7 @@ public class OrderService {
     private final OrderLogMapper orderLogMapper;
     private final InventoryClient inventoryClient;
     private final PaymentClient paymentClient;
+    private final MallCallbackNotifier mallCallbackNotifier;
     private final OrderArchiveService orderArchiveService;
 
     @Value("${oms.order.timeout-minutes:30}")
@@ -75,6 +77,7 @@ public class OrderService {
             OrderLogMapper orderLogMapper,
             InventoryClient inventoryClient,
             PaymentClient paymentClient,
+            MallCallbackNotifier mallCallbackNotifier,
             OrderArchiveService orderArchiveService) {
         this.orderMapper = orderMapper;
         this.orderItemMapper = orderItemMapper;
@@ -82,6 +85,7 @@ public class OrderService {
         this.orderLogMapper = orderLogMapper;
         this.inventoryClient = inventoryClient;
         this.paymentClient = paymentClient;
+        this.mallCallbackNotifier = mallCallbackNotifier;
         this.orderArchiveService = orderArchiveService;
     }
 
@@ -378,6 +382,14 @@ public class OrderService {
         return toResponse(order, items, logs);
     }
 
+    public OrderResponse getByExternalOrderNo(String externalOrderNo) {
+        Order order = findByExternalOrderNo(externalOrderNo);
+        if (order == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "订单不存在");
+        }
+        return get(order.getOrderNo());
+    }
+
     public PageResult<OrderSummaryResponse> page(Long merchantId, Integer status, int page, int size) {
         LambdaQueryWrapper<Order> wrapper = new LambdaQueryWrapper<Order>()
                 .eq(Order::getDeleted, 0)
@@ -482,30 +494,68 @@ public class OrderService {
     public void ship(String orderNo, ShipRequest request, Long operatorId, String operatorName) {
         Order order = findOrder(orderNo);
         transit(order, OrderStatus.SHIPPED, operatorId, operatorName, "发货");
+        mallCallbackNotifier.notifyOrderStatus(
+                order.getOrderNo(), order.getExternalOrderNo(), OrderStatus.SHIPPED, "order.shipped");
     }
 
     @Transactional
     public void sign(String orderNo, Long operatorId, String operatorName) {
         Order order = findOrder(orderNo);
         transit(order, OrderStatus.SIGNED, operatorId, operatorName, "确认签收");
+        mallCallbackNotifier.notifyOrderStatus(
+                order.getOrderNo(), order.getExternalOrderNo(), OrderStatus.SIGNED, "order.signed");
     }
 
     @Transactional
     public void complete(String orderNo, Long operatorId, String operatorName) {
         Order order = findOrder(orderNo);
         transit(order, OrderStatus.COMPLETED, operatorId, operatorName, "完成订单");
+        mallCallbackNotifier.notifyOrderStatus(
+                order.getOrderNo(), order.getExternalOrderNo(), OrderStatus.COMPLETED, "order.completed");
     }
 
     @Transactional
     public void markAfterSales(String orderNo, String returnNo, Integer type, Long operatorId, String operatorName) {
         Order order = findOrder(orderNo);
         transit(order, OrderStatus.AFTER_SALES, operatorId, operatorName, "售后介入：" + returnNo);
+        mallCallbackNotifier.notifyOrderStatus(
+                order.getOrderNo(), order.getExternalOrderNo(), OrderStatus.AFTER_SALES, "order.after_sales");
     }
 
     @Transactional
     public void completeAfterSales(String orderNo, Long operatorId, String operatorName) {
         Order order = findOrder(orderNo);
         transit(order, OrderStatus.COMPLETED, operatorId, operatorName, "售后处理完成");
+    }
+
+    @Transactional
+    public void restoreAfterSalesStatus(String orderNo, Integer previousStatus) {
+        if (previousStatus == null) {
+            return;
+        }
+        Order order = findOrder(orderNo);
+        if (!List.of(
+                        OrderStatus.PAID,
+                        OrderStatus.AUDITED,
+                        OrderStatus.SHIPPED,
+                        OrderStatus.SIGNED,
+                        OrderStatus.COMPLETED)
+                .contains(previousStatus)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "售后前订单状态无效");
+        }
+        int from = order.getStatus();
+        if (from == previousStatus) {
+            return;
+        }
+        order.setStatus(previousStatus);
+        orderMapper.updateById(order);
+        appendLog(
+                order.getId(),
+                from,
+                previousStatus,
+                null,
+                "SYSTEM",
+                "售后驳回/取消，恢复售后前订单状态");
     }
 
     public PaymentClient.CreatePaymentResponse payBlocked(

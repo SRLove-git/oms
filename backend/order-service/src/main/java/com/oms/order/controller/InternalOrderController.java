@@ -4,6 +4,7 @@ import com.oms.common.core.result.Result;
 import com.oms.order.dto.OrderDtos.PaymentSuccessRequest;
 import com.oms.order.dto.OrderDtos.OrderResponse;
 import com.oms.order.service.OrderService;
+import com.oms.order.service.SkuReferenceService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,14 +21,33 @@ import org.springframework.web.bind.annotation.RestController;
 public class InternalOrderController {
 
     private final OrderService orderService;
+    private final SkuReferenceService skuReferenceService;
 
-    public InternalOrderController(OrderService orderService) {
+    public InternalOrderController(OrderService orderService, SkuReferenceService skuReferenceService) {
         this.orderService = orderService;
+        this.skuReferenceService = skuReferenceService;
     }
 
     @GetMapping("/{orderNo}")
     public Result<OrderResponse> getInternal(@PathVariable String orderNo) {
         return Result.ok(orderService.get(orderNo));
+    }
+
+    @GetMapping("/external/{externalOrderNo}")
+    public Result<OrderResponse> getInternalByExternal(@PathVariable String externalOrderNo) {
+        return Result.ok(orderService.getByExternalOrderNo(externalOrderNo));
+    }
+
+    @PostMapping("/{orderNo}/restore-status")
+    public Result<Void> restoreStatus(
+            @PathVariable String orderNo, @RequestBody RestoreStatusRequest request) {
+        orderService.restoreAfterSalesStatus(orderNo, request.status());
+        return Result.ok();
+    }
+
+    @GetMapping("/skus/{skuId}/references")
+    public Result<SkuReferenceService.SkuReferenceCheck> skuReferences(@PathVariable Long skuId) {
+        return Result.ok(skuReferenceService.check(skuId));
     }
 
     @PostMapping("/payment-success")
@@ -56,5 +76,8 @@ public class InternalOrderController {
     }
 
     public record AfterSalesNotifyRequest(String returnNo, Integer type, Integer orderStatus) {
+    }
+
+    public record RestoreStatusRequest(Integer status) {
     }
 }

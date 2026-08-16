@@ -6,6 +6,7 @@ import com.oms.inventory.dto.SkuDtos.SkuCreateRequest;
 import com.oms.inventory.dto.SkuDtos.SkuResponse;
 import com.oms.inventory.dto.SkuDtos.SkuStatusRequest;
 import com.oms.inventory.service.SkuService;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -46,6 +47,12 @@ public class SkuController {
     @PutMapping("/{id}/status")
     public Result<Void> updateStatus(@PathVariable Long id, @RequestBody SkuStatusRequest request) {
         skuService.updateStatus(id, request.status());
+        return Result.ok();
+    }
+
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(@PathVariable Long id) {
+        skuService.delete(id);
         return Result.ok();
     }
 }

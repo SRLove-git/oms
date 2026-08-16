@@ -78,6 +78,7 @@ export default {
     status5: '已签收',
     status6: '已完成',
     status7: '已取消',
+    status8: '售后处理中',
   },
   products: {
     title: '商品下单',

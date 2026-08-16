@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { Message } from '@arco-design/web-vue'
+import { Message, Modal } from '@arco-design/web-vue'
 
-import { createSku, pageSkus, updateSkuStatus } from '@/api/skus'
+import { createSku, deleteSku, pageSkus, updateSkuStatus } from '@/api/skus'
 import type { SkuRecord } from '@/api/skus'
 
 const loading = ref(false)
@@ -57,6 +57,18 @@ async function toggleStatus(row: SkuRecord) {
   load()
 }
 
+function doDelete(row: SkuRecord) {
+  Modal.confirm({
+    title: '删除商品',
+    content: `确定彻底删除商品“${row.name}”（${row.skuNo}）？此操作不可恢复，且要求该商品无库存、无关联订单。`,
+    onOk: async () => {
+      await deleteSku(row.id)
+      Message.success('商品已删除')
+      load()
+    },
+  })
+}
+
 function onPageChange(value: number) {
   page.value = value
   load()
@@ -85,11 +97,14 @@ onMounted(load)
         <a-table-column title="状态" :width="80">
           <template #cell="{ record }">{{ record.status === 1 ? '在售' : '下架' }}</template>
         </a-table-column>
-        <a-table-column title="操作" :width="100" fixed="right">
+        <a-table-column title="操作" :width="170" fixed="right">
           <template #cell="{ record }">
-            <a-button size="mini" :status="record.status === 1 ? 'warning' : undefined" @click="toggleStatus(record)">
-              {{ record.status === 1 ? '下架' : '上架' }}
-            </a-button>
+            <a-space>
+              <a-button size="mini" :status="record.status === 1 ? 'warning' : undefined" @click="toggleStatus(record)">
+                {{ record.status === 1 ? '下架' : '上架' }}
+              </a-button>
+              <a-button size="mini" status="danger" @click="doDelete(record)">删除</a-button>
+            </a-space>
           </template>
         </a-table-column>
       </template>

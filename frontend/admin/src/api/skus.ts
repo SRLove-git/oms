@@ -38,3 +38,8 @@ export async function updateSkuStatus(id: number, status: number) {
   const res = await request.put<ApiResult<void>>(`/skus/${id}/status`, { status })
   return res.data
 }
+
+export async function deleteSku(id: number) {
+  const res = await request.delete<ApiResult<void>>(`/skus/${id}`)
+  return res.data
+}

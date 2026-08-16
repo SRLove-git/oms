@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.oms.aftersales.client.IntegrationClient;
 import com.oms.aftersales.client.InventoryClient;
+import com.oms.aftersales.client.MallCallbackNotifier;
 import com.oms.aftersales.client.OrderClient;
 import com.oms.aftersales.client.PaymentClient;
 import com.oms.aftersales.dto.AfterSalesDtos.ApplyItemRequest;
@@ -20,6 +21,8 @@ import com.oms.aftersales.dto.AfterSalesDtos.ReturnOrderResponse;
 import com.oms.aftersales.dto.AfterSalesDtos.ReturnOrderSummaryResponse;
 import com.oms.aftersales.dto.AfterSalesDtos.ReturnItemResponse;
 import com.oms.aftersales.dto.AfterSalesDtos.RefundRecordResponse;
+import com.oms.aftersales.dto.OpenAfterSalesDtos.OpenReturnOrderRequest;
+import com.oms.aftersales.dto.OpenAfterSalesDtos.OpenReturnOrderResponse;
 import com.oms.aftersales.entity.RefundRecord;
 import com.oms.aftersales.entity.RepairLog;
 import com.oms.aftersales.entity.RepairOrder;
@@ -71,6 +74,7 @@ public class AfterSalesService {
     private final PaymentClient paymentClient;
     private final InventoryClient inventoryClient;
     private final IntegrationClient integrationClient;
+    private final MallCallbackNotifier mallCallbackNotifier;
 
     public AfterSalesService(
             ReturnOrderMapper returnOrderMapper,
@@ -81,7 +85,8 @@ public class AfterSalesService {
             OrderClient orderClient,
             PaymentClient paymentClient,
             InventoryClient inventoryClient,
-            IntegrationClient integrationClient) {
+            IntegrationClient integrationClient,
+            MallCallbackNotifier mallCallbackNotifier) {
         this.returnOrderMapper = returnOrderMapper;
         this.returnItemMapper = returnItemMapper;
         this.refundRecordMapper = refundRecordMapper;
@@ -91,6 +96,7 @@ public class AfterSalesService {
         this.paymentClient = paymentClient;
         this.inventoryClient = inventoryClient;
         this.integrationClient = integrationClient;
+        this.mallCallbackNotifier = mallCallbackNotifier;
     }
 
     @Transactional
@@ -102,11 +108,79 @@ public class AfterSalesService {
         if (order == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "订单不存在");
         }
-        if (order.status() != 4 && order.status() != 5 && order.status() != 6) {
+        return applyInternal(order, request.type(), request.reason(), request.items(), false);
+    }
+
+    /**
+     * 商城开放 API 申请退款：无需传 orderItemId，按整单生成售后明细。
+     * 商城已支付/已发货/已完成订单均允许发起，由 OMS 管理端后续审核。
+     */
+    @Transactional
+    public ReturnOrderResponse applyOpen(OpenReturnOrderRequest request, Long merchantId) {
+        if (request == null || request.externalOrderNo() == null || request.externalOrderNo().isBlank()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "externalOrderNo 不能为空");
+        }
+        OrderClient.OrderDetail order = getOrderByExternalOrderNo(request.externalOrderNo());
+        if (order == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "订单不存在");
+        }
+        if (merchantId != null && !merchantId.equals(order.merchantId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN.getCode(), "无权操作该订单");
+        }
+        List<ApplyItemRequest> items = order.items() == null ? List.of() : order.items().stream()
+                .map(item -> new ApplyItemRequest(item.id(), item.skuId(), item.quantity()))
+                .toList();
+        return applyInternal(order, request.type(), request.reason(), items, true);
+    }
+
+    public OpenReturnOrderResponse getOpenByExternal(String externalOrderNo, Long merchantId) {
+        if (externalOrderNo == null || externalOrderNo.isBlank()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "externalOrderNo 不能为空");
+        }
+        OrderClient.OrderDetail order = getOrderByExternalOrderNo(externalOrderNo);
+        if (order == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "订单不存在");
+        }
+        if (merchantId != null && !merchantId.equals(order.merchantId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN.getCode(), "无权操作该订单");
+        }
+        ReturnOrder returnOrder = returnOrderMapper.selectOne(new LambdaQueryWrapper<ReturnOrder>()
+                .eq(ReturnOrder::getOrderNo, order.orderNo())
+                .eq(ReturnOrder::getDeleted, 0)
+                .orderByDesc(ReturnOrder::getId)
+                .last("LIMIT 1"));
+        if (returnOrder == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "售后单不存在");
+        }
+        return new OpenReturnOrderResponse(
+                returnOrder.getReturnNo(),
+                returnOrder.getOrderNo(),
+                externalOrderNo,
+                returnOrder.getType(),
+                returnOrder.getStatus(),
+                returnOrder.getReason(),
+                returnOrder.getTotalAmount(),
+                returnOrder.getCreatedAt());
+    }
+
+    private ReturnOrderResponse applyInternal(
+            OrderClient.OrderDetail order,
+            Integer type,
+            String reason,
+            List<ApplyItemRequest> items,
+            boolean allowPaidOrder) {
+        if (items == null || items.isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "售后明细不能为空");
+        }
+        if (allowPaidOrder) {
+            if (!List.of(2, 3, 4, 5, 6).contains(order.status())) {
+                throw new BusinessException(ErrorCode.CONFLICT.getCode(), "当前订单状态不允许申请售后");
+            }
+        } else if (order.status() != 4 && order.status() != 5 && order.status() != 6) {
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), "当前订单状态不允许申请售后");
         }
         boolean exists = returnOrderMapper.selectCount(new LambdaQueryWrapper<ReturnOrder>()
-                        .eq(ReturnOrder::getOrderNo, request.orderNo())
+                        .eq(ReturnOrder::getOrderNo, order.orderNo())
                         .in(ReturnOrder::getStatus, List.of(STATUS_PENDING_REVIEW, STATUS_APPROVED, STATUS_INSPECTING, STATUS_REFUNDING)))
                 > 0;
         if (exists) {
@@ -118,11 +192,12 @@ public class AfterSalesService {
         returnOrder.setOrderId(order.id());
         returnOrder.setOrderNo(order.orderNo());
         returnOrder.setMerchantId(order.merchantId());
-        returnOrder.setType(request.type() == null ? 1 : request.type());
+        returnOrder.setType(type == null ? 1 : type);
         returnOrder.setStatus(STATUS_PENDING_REVIEW);
-        returnOrder.setReason(request.reason());
+        returnOrder.setPreviousStatus(order.status());
+        returnOrder.setReason(reason);
         BigDecimal total = BigDecimal.ZERO;
-        for (ApplyItemRequest item : request.items()) {
+        for (ApplyItemRequest item : items) {
             OrderClient.OrderItem orderItem = order.items().stream()
                     .filter(i -> i.id().equals(item.orderItemId()))
                     .findFirst()
@@ -137,7 +212,7 @@ public class AfterSalesService {
         returnOrder.setTotalAmount(total);
         returnOrderMapper.insert(returnOrder);
 
-        for (ApplyItemRequest item : request.items()) {
+        for (ApplyItemRequest item : items) {
             OrderClient.OrderItem orderItem = order.items().stream()
                     .filter(i -> i.id().equals(item.orderItemId()))
                     .findFirst()
@@ -203,7 +278,10 @@ public class AfterSalesService {
             bestEffort(() -> orderClient.notifyAfterSales(
                     returnOrder.getOrderNo(),
                     new OrderClient.AfterSalesNotifyRequest(returnOrder.getReturnNo(), returnOrder.getType(), null)));
+        } else {
+            restorePreviousOrderStatus(returnOrder);
         }
+        notifyMall(returnOrder);
         bestEffort(() -> integrationClient.send(new IntegrationClient.SendRequest(
                 "in_app",
                 "AFTER_SALES_REVIEWED",
@@ -249,6 +327,8 @@ public class AfterSalesService {
         } else {
             returnOrder.setStatus(STATUS_REJECTED);
             returnOrderMapper.updateById(returnOrder);
+            restorePreviousOrderStatus(returnOrder);
+            notifyMall(returnOrder);
             bestEffort(() -> integrationClient.send(new IntegrationClient.SendRequest(
                     "in_app",
                     "AFTER_SALES_REJECTED",
@@ -256,6 +336,7 @@ public class AfterSalesService {
                     "售后商品质检不通过",
                     "售后单 " + returnNo + " 质检不通过：" + (request.remark() == null ? "" : request.remark()))));
         }
+        notifyMall(returnOrder);
     }
 
     @Transactional
@@ -281,6 +362,7 @@ public class AfterSalesService {
         returnOrder.setStatus(STATUS_COMPLETED);
         returnOrderMapper.updateById(returnOrder);
         completeOrderLinkage(returnOrder);
+        notifyMall(returnOrder);
         bestEffort(() -> integrationClient.send(new IntegrationClient.SendRequest(
                 "in_app",
                 "AFTER_SALES_REFUNDED",
@@ -299,6 +381,7 @@ public class AfterSalesService {
         returnOrder.setStatus(STATUS_COMPLETED);
         returnOrderMapper.updateById(returnOrder);
         completeOrderLinkage(returnOrder);
+        notifyMall(returnOrder);
         bestEffort(() -> integrationClient.send(new IntegrationClient.SendRequest(
                 "in_app",
                 "AFTER_SALES_EXCHANGED",
@@ -313,6 +396,8 @@ public class AfterSalesService {
         requireStatusIn(returnOrder, List.of(STATUS_PENDING_REVIEW, STATUS_APPROVED, STATUS_INSPECTING));
         returnOrder.setStatus(STATUS_CANCELLED);
         returnOrderMapper.updateById(returnOrder);
+        restorePreviousOrderStatus(returnOrder);
+        notifyMall(returnOrder);
     }
 
     @Transactional
@@ -357,6 +442,7 @@ public class AfterSalesService {
                 returnOrder.setStatus(STATUS_COMPLETED);
                 returnOrderMapper.updateById(returnOrder);
                 completeOrderLinkage(returnOrder);
+                notifyMall(returnOrder);
             }
         } else if ("cancel".equals(action)) {
             requireRepairStatusIn(repair, List.of(1, 2));
@@ -454,6 +540,20 @@ public class AfterSalesService {
         bestEffort(() -> orderClient.notifyAfterSalesComplete(returnOrder.getOrderNo()));
     }
 
+    private void restorePreviousOrderStatus(ReturnOrder returnOrder) {
+        bestEffort(() -> orderClient.restoreAfterSalesStatus(
+                returnOrder.getOrderNo(),
+                new OrderClient.RestoreStatusRequest(returnOrder.getPreviousStatus())));
+    }
+
+    private void notifyMall(ReturnOrder returnOrder) {
+        bestEffort(() -> mallCallbackNotifier.notifyAfterSaleStatus(
+                returnOrder.getOrderNo(),
+                returnOrder.getReturnNo(),
+                returnOrder.getStatus(),
+                "aftersale.updated"));
+    }
+
     private OrderClient.OrderDetail getOrder(String orderNo) {
         try {
             Result<OrderClient.OrderDetail> result = orderClient.get(orderNo);
@@ -463,6 +563,19 @@ public class AfterSalesService {
             return result.data();
         } catch (Exception ex) {
             log.error("查询订单失败 orderNo={}", orderNo, ex);
+            return null;
+        }
+    }
+
+    private OrderClient.OrderDetail getOrderByExternalOrderNo(String externalOrderNo) {
+        try {
+            Result<OrderClient.OrderDetail> result = orderClient.getByExternalOrderNo(externalOrderNo);
+            if (result == null || !result.isSuccess()) {
+                return null;
+            }
+            return result.data();
+        } catch (Exception ex) {
+            log.error("按外部订单号查询订单失败 externalOrderNo={}", externalOrderNo, ex);
             return null;
         }
     }

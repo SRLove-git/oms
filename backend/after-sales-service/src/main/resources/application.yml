@@ -55,3 +55,7 @@ management:
 logging:
   level:
     com.oms: ${LOG_LEVEL:INFO}
+
+oms:
+  callback:
+    base-url: ${OMS_MALL_CALLBACK_URL:http://localhost:8090}

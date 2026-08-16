@@ -16,11 +16,18 @@ public interface OrderClient {
     @GetMapping("/internal/{orderNo}")
     Result<OrderDetail> get(@PathVariable String orderNo);
 
+    @GetMapping("/internal/external/{externalOrderNo}")
+    Result<OrderDetail> getByExternalOrderNo(@PathVariable String externalOrderNo);
+
     @PostMapping("/internal/{orderNo}/after-sales")
     Result<Void> notifyAfterSales(@PathVariable String orderNo, @RequestBody AfterSalesNotifyRequest request);
 
     @PostMapping("/internal/{orderNo}/after-sales-complete")
     Result<Void> notifyAfterSalesComplete(@PathVariable String orderNo);
+
+    @PostMapping("/internal/{orderNo}/restore-status")
+    Result<Void> restoreAfterSalesStatus(
+            @PathVariable String orderNo, @RequestBody RestoreStatusRequest request);
 
     @GetMapping("/internal/completed-count")
     Result<CompletedOrderCount> completedCount(
@@ -42,6 +49,9 @@ public interface OrderClient {
     }
 
     record AfterSalesNotifyRequest(String returnNo, Integer type, Integer orderStatus) {
+    }
+
+    record RestoreStatusRequest(Integer status) {
     }
 
     record CompletedOrderCount(long completedCount) {
