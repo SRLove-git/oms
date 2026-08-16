@@ -10,7 +10,7 @@
 | [report/performance-test.md](./report/performance-test.md) | 性能压测说明（阶段三） |
 | [sit/](./sit/) | 阶段四测试与验收文档（SIT/安全/压测/合规/UAT/验收） |
 | [ops/](./ops/) | 阶段五上线与护航文档（上线演练、值班 Runbook、交接、复盘） |
-| [商城OMS功能补强路线图](../../商城OMS功能补强路线图.md) | 商城 + OMS 后续 P1/P2 功能补强路线图 |
+| [商城OMS功能补强路线图](./商城OMS功能补强路线图.md) | 商城 + OMS 后续 P1/P2 功能补强路线图 |
 | [../deploy/k8s/](../deploy/k8s/README.md) | K8s 生产编排（部署/灰度/回滚） |
 | [../deploy/monitoring/](../deploy/monitoring/README.md) | 监控告警（Prometheus/Alertmanager/Grafana） |
 | [../backend/README.md](../backend/README.md) | 后端模块与启动方式 |
