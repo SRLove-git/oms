@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { Message, Modal } from '@arco-design/web-vue'
 
 import {
+  applyReturnOrder,
   cancelReturnOrder,
   createRepair,
   exchangeShip,
@@ -15,6 +16,7 @@ import {
   type ReturnOrder,
   type ReturnOrderSummary,
 } from '@/api/aftersales'
+import { getOrder, type OrderItemRecord } from '@/api/orders'
 
 const TYPE_NAMES: Record<number, string> = {
   1: '退货',
@@ -39,6 +41,11 @@ const page = ref(1)
 const pageSize = ref(10)
 const detailVisible = ref(false)
 const detail = ref<ReturnOrder | null>(null)
+const applyVisible = ref(false)
+const applySubmitting = ref(false)
+const applyItems = ref<OrderItemRecord[]>([])
+const selectedIds = ref<number[]>([])
+const applyForm = reactive({ orderNo: '', type: 1, reason: '' })
 
 async function load() {
   loading.value = true
@@ -54,6 +61,57 @@ async function load() {
 async function showDetail(row: ReturnOrderSummary) {
   detail.value = await getReturnOrder(row.returnNo)
   detailVisible.value = true
+}
+
+function openApply() {
+  applyVisible.value = true
+  applyForm.orderNo = ''
+  applyForm.type = 1
+  applyForm.reason = ''
+  applyItems.value = []
+  selectedIds.value = []
+}
+
+async function loadApplyItems() {
+  if (!applyForm.orderNo) {
+    Message.warning('请输入订单号')
+    return
+  }
+  const order = await getOrder(applyForm.orderNo)
+  applyItems.value = order.items
+  selectedIds.value = []
+}
+
+function toggleApplyItem(id: number, checked: boolean) {
+  selectedIds.value = checked
+    ? [...new Set([...selectedIds.value, id])]
+    : selectedIds.value.filter((value) => value !== id)
+}
+
+async function submitApply() {
+  const selected = applyItems.value.filter((item) => selectedIds.value.includes(item.id))
+  if (!applyForm.orderNo || selected.length === 0) {
+    Message.warning('请选择订单与售后商品')
+    return
+  }
+  applySubmitting.value = true
+  try {
+    await applyReturnOrder({
+      orderNo: applyForm.orderNo,
+      type: applyForm.type,
+      reason: applyForm.reason,
+      items: selected.map((item) => ({
+        orderItemId: item.id,
+        skuId: item.skuId,
+        quantity: item.quantity,
+      })),
+    })
+    Message.success('售后单已创建')
+    applyVisible.value = false
+    load()
+  } finally {
+    applySubmitting.value = false
+  }
 }
 
 function doReview(row: ReturnOrderSummary, approved: boolean) {
@@ -154,6 +212,9 @@ onMounted(load)
 
 <template>
   <a-card :bordered="false" title="售后服务">
+    <template #extra>
+      <a-button type="primary" @click="openApply">新建售后</a-button>
+    </template>
     <a-table row-key="id" :loading="loading" :data="list" :pagination="false" :scroll="{ x: 1100 }">
       <template #columns>
         <a-table-column title="售后单号" data-index="returnNo" :width="180" />
@@ -219,6 +280,53 @@ onMounted(load)
       show-total
       @change="onPageChange"
     />
+
+    <a-modal
+      v-model:visible="applyVisible"
+      title="新建售后（支持部分商品）"
+      :ok-loading="applySubmitting"
+      @ok="submitApply"
+    >
+      <a-form layout="vertical" :model="applyForm">
+        <a-form-item label="订单号" required>
+          <a-input v-model="applyForm.orderNo" placeholder="请输入订单号" />
+          <a-button style="margin-top: 8px" @click="loadApplyItems">加载订单商品</a-button>
+        </a-form-item>
+        <a-form-item label="售后类型" required>
+          <a-select v-model="applyForm.type">
+            <a-option :value="1">退货</a-option>
+            <a-option :value="2">换货</a-option>
+            <a-option :value="3">维修</a-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="售后原因">
+          <a-textarea v-model="applyForm.reason" placeholder="请填写售后原因" />
+        </a-form-item>
+      </a-form>
+
+      <a-table
+        v-if="applyItems.length"
+        row-key="id"
+        :data="applyItems"
+        :pagination="false"
+        size="small"
+      >
+        <template #columns>
+          <a-table-column title="" :width="40">
+            <template #cell="{ record }">
+              <a-checkbox
+                :model-value="selectedIds.includes(record.id)"
+                @change="(checked: boolean | (string | number | boolean)[]) => toggleApplyItem(record.id, checked === true)"
+              />
+            </template>
+          </a-table-column>
+          <a-table-column title="SKU ID" data-index="skuId" />
+          <a-table-column title="商品名称" data-index="skuName" />
+          <a-table-column title="数量" data-index="quantity" />
+          <a-table-column title="单价" data-index="unitPrice" />
+        </template>
+      </a-table>
+    </a-modal>
 
     <a-drawer :visible="detailVisible" :width="640" title="售后单详情" @cancel="detailVisible = false">
       <a-descriptions v-if="detail" :column="2" bordered size="small">

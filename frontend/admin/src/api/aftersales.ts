@@ -64,6 +64,16 @@ export async function pageReturnOrders(params: { status?: number; page: number; 
   return res.data.data
 }
 
+export async function applyReturnOrder(data: {
+  orderNo: string
+  type: number
+  reason: string
+  items: Array<{ orderItemId: number; skuId: number; quantity: number }>
+}) {
+  const res = await request.post<ApiResult<ReturnOrder>>('/return-orders', data)
+  return res.data.data
+}
+
 export async function getReturnOrder(returnNo: string) {
   const res = await request.get<ApiResult<ReturnOrder>>(`/return-orders/${returnNo}`)
   return res.data.data
