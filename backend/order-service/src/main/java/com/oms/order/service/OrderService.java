@@ -153,6 +153,7 @@ public class OrderService {
                 new CreateOrderRequest(merchantId, request.orderType(), request.remark(), request.items()),
                 null, "OPEN_API");
         Order order = findOrder(created.orderNo());
+        BigDecimal discountAmount = normalizeDeliveryFee(request.discountAmount());
         order.setExternalOrderNo(request.externalOrderNo());
         order.setSource("OPEN_API");
         order.setConsignee(trimToNull(request.consignee()));
@@ -160,7 +161,8 @@ public class OrderService {
         order.setAddress(trimToNull(request.address()));
         // 配送费计入订单总额与应付金额（支付成功通知金额 = 商品总额 + 配送费）
         order.setDeliveryFee(deliveryFee);
-        order.setTotalAmount(order.getTotalAmount().add(deliveryFee));
+        order.setDiscountAmount(discountAmount);
+        order.setTotalAmount(order.getTotalAmount().add(deliveryFee).subtract(discountAmount));
         order.setPayAmount(order.getTotalAmount());
         try {
             orderMapper.updateById(order);

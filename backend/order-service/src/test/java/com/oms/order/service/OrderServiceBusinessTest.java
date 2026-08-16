@@ -454,7 +454,7 @@ class OrderServiceBusinessTest {
         OpenOrderResponse response = orderService.createOpen(
                 new OpenCreateOrderRequest(
                         "B20260815001", 2, "商城订单", "张三", "+65 8123 4567", "新加坡示例路 1 号",
-                        new BigDecimal("9.90"), List.of(new OrderItemRequest(1L, 2))),
+                        new BigDecimal("9.90"), null, List.of(new OrderItemRequest(1L, 2))),
                 1L);
 
         ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
@@ -494,7 +494,7 @@ class OrderServiceBusinessTest {
         OpenOrderResponse response = orderService.createOpen(
                 new OpenCreateOrderRequest(
                         "B20260815002", 2, null, null, null, null, null,
-                        List.of(new OrderItemRequest(1L, 2))),
+                        null, List.of(new OrderItemRequest(1L, 2))),
                 1L);
 
         ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
@@ -512,7 +512,7 @@ class OrderServiceBusinessTest {
         assertThatThrownBy(() -> orderService.createOpen(
                         new OpenCreateOrderRequest(
                                 "B20260815003", 2, null, null, null, null,
-                                new BigDecimal("-1.00"), List.of(new OrderItemRequest(1L, 2))),
+                                new BigDecimal("-1.00"), null, List.of(new OrderItemRequest(1L, 2))),
                         1L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("配送费不能为负数");

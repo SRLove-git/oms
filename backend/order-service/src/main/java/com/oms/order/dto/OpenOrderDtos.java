@@ -22,6 +22,7 @@ public final class OpenOrderDtos {
             String phone,
             String address,
             BigDecimal deliveryFee,
+            BigDecimal discountAmount,
             List<OrderItemRequest> items) {
     }
 
