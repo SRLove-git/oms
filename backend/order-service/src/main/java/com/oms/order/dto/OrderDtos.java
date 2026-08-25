@@ -65,7 +65,11 @@ public final class OrderDtos {
     public record CancelRequest(String reason) {
     }
 
-    public record PayRequest(String channel) {
+    public record PayRequest(String channel, BigDecimal amount) {
+
+        public PayRequest(String channel) {
+            this(channel, null);
+        }
     }
 
     public record ShipRequest(String trackingNo, String carrier) {
@@ -73,5 +77,14 @@ public final class OrderDtos {
 
     public record PaymentSuccessRequest(
             String orderNo, String paymentNo, String channel, BigDecimal amount, String channelTxnNo) {
+    }
+
+    public record OrderPaymentState(
+            String orderNo,
+            Long merchantId,
+            BigDecimal payAmount,
+            String currency,
+            BigDecimal paidAmount,
+            Integer status) {
     }
 }

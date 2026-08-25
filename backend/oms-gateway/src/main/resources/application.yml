@@ -46,7 +46,7 @@ spring:
             - id: payment-center
               uri: lb://payment-center
               predicates:
-                - Path=/api/v1/payments/**,/api/v1/payment-callbacks/**,/api/v1/reconciliation/**
+                - Path=/api/v1/payments/**,/api/v1/payment-callbacks/**,/api/v1/reconciliation/**,/api/v1/balances/**
             - id: integration-service
               uri: lb://integration-service
               predicates:

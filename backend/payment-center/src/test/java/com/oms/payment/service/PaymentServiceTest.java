@@ -11,8 +11,12 @@ import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.oms.common.core.exception.BusinessException;
+import com.oms.common.core.result.Result;
 import com.oms.payment.adapter.MockPaymentAdapter;
+import com.oms.payment.adapter.MastercardPaymentAdapter;
+import com.oms.payment.adapter.VisaPaymentAdapter;
 import com.oms.payment.client.OrderClient;
+import com.oms.payment.client.OrderClient.OrderPaymentState;
 import com.oms.payment.dto.PaymentDtos.CallbackRequest;
 import com.oms.payment.dto.PaymentDtos.CreatePaymentRequest;
 import com.oms.payment.dto.PaymentDtos.CreatePaymentResponse;
@@ -33,6 +37,7 @@ class PaymentServiceTest {
     private PaymentTransactionMapper transactionMapper;
     private PaymentNotifyLogMapper notifyLogMapper;
     private OrderClient orderClient;
+    private BalanceService balanceService;
     private PaymentService paymentService;
 
     @BeforeEach
@@ -40,8 +45,14 @@ class PaymentServiceTest {
         transactionMapper = mock(PaymentTransactionMapper.class);
         notifyLogMapper = mock(PaymentNotifyLogMapper.class);
         orderClient = mock(OrderClient.class);
+        balanceService = mock(BalanceService.class);
         paymentService =
-                new PaymentService(transactionMapper, notifyLogMapper, orderClient, List.of(new MockPaymentAdapter()));
+                new PaymentService(
+                        transactionMapper,
+                        notifyLogMapper,
+                        orderClient,
+                        balanceService,
+                        List.of(new MockPaymentAdapter(), new VisaPaymentAdapter(), new MastercardPaymentAdapter()));
         setField(paymentService, "mockOnly", true);
     }
 
@@ -49,7 +60,7 @@ class PaymentServiceTest {
 
     @Test
     void mockChannelShouldCreatePayment() {
-        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        stubPaymentState(BigDecimal.ZERO);
         when(transactionMapper.insert(any(PaymentTransaction.class))).thenAnswer(invocation -> {
             ((PaymentTransaction) invocation.getArgument(0)).setId(1L);
             return 1;
@@ -69,13 +80,13 @@ class PaymentServiceTest {
         assertThatThrownBy(() -> paymentService.create(
                         new CreatePaymentRequest("O001", new BigDecimal("100.00"), "SGD", "wechat", 1L)))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("仅支持 mock 渠道");
+                .hasMessageContaining("仅支持 mock/visa/mastercard/balance 渠道");
         verify(transactionMapper, never()).insert(any(PaymentTransaction.class));
     }
 
     @Test
     void createShouldDefaultNullChannelToMock() {
-        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        stubPaymentState(BigDecimal.ZERO);
         when(transactionMapper.insert(any(PaymentTransaction.class))).thenAnswer(invocation -> {
             ((PaymentTransaction) invocation.getArgument(0)).setId(1L);
             return 1;
@@ -91,6 +102,7 @@ class PaymentServiceTest {
     @Test
     void createShouldRejectUnsupportedChannelWhenMockOnlyDisabled() throws Exception {
         setField(paymentService, "mockOnly", false);
+        stubPaymentState(BigDecimal.ZERO);
 
         assertThatThrownBy(() -> paymentService.create(
                         new CreatePaymentRequest("O001", new BigDecimal("100.00"), "SGD", "unknown", 1L)))
@@ -100,28 +112,59 @@ class PaymentServiceTest {
     }
 
     @Test
-    void createShouldReturnExistingPaymentForSameOrder() {
-        PaymentTransaction existing = transaction(1);
-        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(existing);
-
-        CreatePaymentResponse response = paymentService.create(
-                new CreatePaymentRequest("O001", new BigDecimal("100.00"), "SGD", "mock", 1L));
-
-        assertThat(response.paymentNo()).isEqualTo("P001");
-        assertThat(response.channel()).isEqualTo("mock");
-        assertThat(response.amount()).isEqualByComparingTo("100.00");
-        verify(transactionMapper, never()).insert(any(PaymentTransaction.class));
-    }
-
-    @Test
     void createShouldRejectWhenOrderAlreadyPaid() {
-        when(transactionMapper.selectOne(any(Wrapper.class))).thenReturn(transaction(2));
+        stubPaymentState(BigDecimal.ZERO, 2);
 
         assertThatThrownBy(() -> paymentService.create(
                         new CreatePaymentRequest("O001", new BigDecimal("100.00"), "SGD", "mock", 1L)))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("已支付");
+                .hasMessageContaining("订单状态不允许支付");
         verify(transactionMapper, never()).insert(any(PaymentTransaction.class));
+    }
+
+    @Test
+    void createShouldRejectAmountExceedingOutstanding() {
+        stubPaymentState(new BigDecimal("60.00"));
+
+        assertThatThrownBy(() -> paymentService.create(
+                        new CreatePaymentRequest("O001", new BigDecimal("50.00"), "SGD", "mock", 1L)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("超过订单待支付金额");
+        verify(transactionMapper, never()).insert(any(PaymentTransaction.class));
+    }
+
+    @Test
+    void createShouldAllowPartialPayment() {
+        stubPaymentState(new BigDecimal("60.00"));
+        when(transactionMapper.insert(any(PaymentTransaction.class))).thenAnswer(invocation -> {
+            ((PaymentTransaction) invocation.getArgument(0)).setId(1L);
+            return 1;
+        });
+
+        CreatePaymentResponse response = paymentService.create(
+                new CreatePaymentRequest("O001", new BigDecimal("30.00"), "SGD", "visa", 1L));
+
+        assertThat(response.channel()).isEqualTo("visa");
+        assertThat(response.amount()).isEqualByComparingTo("30.00");
+        verify(transactionMapper).insert(any(PaymentTransaction.class));
+    }
+
+    @Test
+    void createShouldPayByBalance() {
+        stubPaymentState(BigDecimal.ZERO);
+        when(balanceService.debit(any(), any(), any())).thenReturn("B0001");
+        when(transactionMapper.insert(any(PaymentTransaction.class))).thenAnswer(invocation -> {
+            ((PaymentTransaction) invocation.getArgument(0)).setId(1L);
+            return 1;
+        });
+
+        CreatePaymentResponse response = paymentService.create(
+                new CreatePaymentRequest("O001", new BigDecimal("100.00"), "SGD", "balance", 1L));
+
+        assertThat(response.channel()).isEqualTo("balance");
+        assertThat(response.payUrl()).isNull();
+        verify(balanceService).debit(1L, new BigDecimal("100.00"), "订单余额支付 O001");
+        verify(orderClient).notifyPaymentSuccess(any());
     }
 
     // ---------- 回调处理 ----------
@@ -256,6 +299,16 @@ class PaymentServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("超过支付金额");
         verify(transactionMapper, never()).updateById(any(PaymentTransaction.class));
+    }
+
+    private void stubPaymentState(BigDecimal paidAmount) {
+        stubPaymentState(paidAmount, 1);
+    }
+
+    private void stubPaymentState(BigDecimal paidAmount, int status) {
+        when(orderClient.getPaymentState(any()))
+                .thenReturn(Result.ok(new OrderPaymentState(
+                        "O001", 1L, new BigDecimal("100.00"), "SGD", paidAmount, status)));
     }
 
     private PaymentTransaction transaction(int status) {

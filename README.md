@@ -118,6 +118,13 @@ pnpm dev
 - 前端测试：管理端/门户端/移动端接入 Vitest（组件/状态/i18n 用例，共 27 例）
 - 后端测试补强：订单/库存/支付核心链路单测扩充（订单 35、库存 14、支付 17、网关 7，全量 83 用例通过）
 
+## 支付补强（国际卡 / 部分支付 / 余额）已交付
+
+- 国际卡 PSP：新增 Visa / Mastercard 渠道适配器（mock 通道，真实 PSP 证书就绪后替换内部实现）
+- 部分支付：订单支持多笔支付（定金 + 尾款），支付中心校验待支付金额，订单服务累计已付金额，付清后扣减库存
+- 余额支付：新增商户余额账户与流水，支持充值、余额支付、余额退款回充
+- 相关说明见 [backend/README.md](./backend/README.md) 与 [支付中心适配器目录](./backend/payment-center/src/main/java/com/oms/payment/adapter/)
+
 ## 文档
 
 - [backend/README.md](./backend/README.md)：后端模块说明与启动方式

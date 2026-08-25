@@ -23,6 +23,7 @@ import com.oms.order.constant.OrderStatus;
 import com.oms.order.dto.OrderDtos.CancelRequest;
 import com.oms.order.dto.OrderDtos.CreateOrderRequest;
 import com.oms.order.dto.OrderDtos.OrderItemRequest;
+import com.oms.order.dto.OrderDtos.OrderPaymentState;
 import com.oms.order.dto.OrderDtos.PaymentSuccessRequest;
 import com.oms.order.dto.OpenOrderDtos.OpenCreateOrderRequest;
 import com.oms.order.dto.OpenOrderDtos.OpenOrderResponse;
@@ -288,6 +289,8 @@ class OrderServiceBusinessTest {
         payment.setPaymentNo("P001");
         payment.setStatus(1);
         when(orderPaymentMapper.selectOne(any(Wrapper.class))).thenReturn(payment);
+        when(orderPaymentMapper.sumPaidAmount(1L))
+                .thenReturn(BigDecimal.ZERO, new BigDecimal("100.00"));
         when(orderItemMapper.selectList(any(Wrapper.class))).thenReturn(List.of(orderItem(1L, 2)));
         when(inventoryClient.deduct(any())).thenReturn(Result.ok());
         when(orderMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
@@ -314,6 +317,8 @@ class OrderServiceBusinessTest {
         payment.setPaymentNo("P001");
         payment.setStatus(1);
         when(orderPaymentMapper.selectOne(any(Wrapper.class))).thenReturn(payment);
+        when(orderPaymentMapper.sumPaidAmount(1L))
+                .thenReturn(BigDecimal.ZERO, new BigDecimal("100.00"));
         when(orderItemMapper.selectList(any(Wrapper.class))).thenReturn(List.of(orderItem(1L, 2)));
         when(inventoryClient.deduct(any())).thenReturn(Result.ok());
         when(orderMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
@@ -347,6 +352,8 @@ class OrderServiceBusinessTest {
         Order order = order(OrderStatus.PENDING_PAYMENT);
         when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
         when(orderPaymentMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(orderPaymentMapper.sumPaidAmount(1L))
+                .thenReturn(BigDecimal.ZERO, new BigDecimal("100.00"));
         when(orderItemMapper.selectList(any(Wrapper.class))).thenReturn(List.of(orderItem(1L, 2)));
         when(inventoryClient.deduct(any())).thenReturn(Result.ok());
         when(orderMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
@@ -363,6 +370,8 @@ class OrderServiceBusinessTest {
         Order order = order(OrderStatus.PENDING_PAYMENT);
         when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
         when(orderPaymentMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(orderPaymentMapper.sumPaidAmount(1L))
+                .thenReturn(BigDecimal.ZERO, new BigDecimal("100.00"));
         when(orderItemMapper.selectList(any(Wrapper.class))).thenReturn(List.of(orderItem(1L, 2)));
         when(inventoryClient.deduct(any())).thenThrow(new RuntimeException("net down"));
         when(orderMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
@@ -377,15 +386,46 @@ class OrderServiceBusinessTest {
     void paymentSuccessShouldIgnoreAmountMismatch() {
         Order order = order(OrderStatus.PENDING_PAYMENT);
         when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
+        when(orderPaymentMapper.sumPaidAmount(1L)).thenReturn(BigDecimal.ZERO);
         when(orderItemMapper.selectList(any(Wrapper.class))).thenReturn(List.of(orderItem(1L, 2)));
 
         orderService.handlePaymentSuccess(
-                new PaymentSuccessRequest("O001", "P001", "mock", new BigDecimal("99.00"), "TXN1"));
+                new PaymentSuccessRequest("O001", "P001", "mock", new BigDecimal("101.00"), "TXN1"));
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
         verify(orderMapper, never()).update(isNull(), any(Wrapper.class));
         verify(orderLogMapper, never()).insert(any(OrderLog.class));
         verify(inventoryClient, never()).deduct(any());
+    }
+
+    @Test
+    void paymentSuccessShouldKeepOrderPendingForPartialPayment() {
+        Order order = order(OrderStatus.PENDING_PAYMENT);
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
+        when(orderPaymentMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(orderPaymentMapper.sumPaidAmount(1L))
+                .thenReturn(BigDecimal.ZERO, new BigDecimal("30.00"));
+        when(orderItemMapper.selectList(any(Wrapper.class))).thenReturn(List.of(orderItem(1L, 2)));
+
+        orderService.handlePaymentSuccess(
+                new PaymentSuccessRequest("O001", "P001", "visa", new BigDecimal("30.00"), "TXN1"));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
+        verify(orderMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(inventoryClient, never()).deduct(any());
+    }
+
+    @Test
+    void getPaymentStateShouldReturnOutstandingAmount() {
+        Order order = order(OrderStatus.PENDING_PAYMENT);
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
+        when(orderPaymentMapper.sumPaidAmount(1L)).thenReturn(new BigDecimal("30.00"));
+
+        OrderPaymentState state = orderService.getPaymentState("O001");
+
+        assertThat(state.payAmount()).isEqualByComparingTo("100.00");
+        assertThat(state.paidAmount()).isEqualByComparingTo("30.00");
+        assertThat(state.status()).isEqualTo(OrderStatus.PENDING_PAYMENT);
     }
 
     // ---------- 超时取消 ----------

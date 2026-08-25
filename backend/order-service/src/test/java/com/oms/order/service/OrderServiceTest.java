@@ -89,6 +89,8 @@ class OrderServiceTest {
     void paymentSuccessShouldDeductOnlyOnce() {
         Order order = order(OrderStatus.PENDING_PAYMENT);
         when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
+        when(orderPaymentMapper.sumPaidAmount(1L))
+                .thenReturn(BigDecimal.ZERO, new BigDecimal("100.00"));
         when(inventoryClient.deduct(any())).thenReturn(Result.ok());
         when(orderMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
 

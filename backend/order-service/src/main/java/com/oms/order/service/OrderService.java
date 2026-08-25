@@ -18,6 +18,7 @@ import com.oms.order.dto.OrderDtos.CreateOrderRequest;
 import com.oms.order.dto.OrderDtos.OrderItemRequest;
 import com.oms.order.dto.OrderDtos.OrderItemResponse;
 import com.oms.order.dto.OrderDtos.OrderLogResponse;
+import com.oms.order.dto.OrderDtos.OrderPaymentState;
 import com.oms.order.dto.OrderDtos.OrderResponse;
 import com.oms.order.dto.OrderDtos.OrderSummaryResponse;
 import com.oms.order.dto.OrderDtos.PayRequest;
@@ -311,6 +312,43 @@ public class OrderService {
         }
     }
 
+    private void upsertPaidPayment(Order order, PaymentSuccessRequest request, BigDecimal amount) {
+        OrderPayment payment = orderPaymentMapper.selectOne(new LambdaQueryWrapper<OrderPayment>()
+                .eq(OrderPayment::getPaymentNo, request.paymentNo())
+                .last("LIMIT 1"));
+        if (payment != null) {
+            payment.setStatus(2);
+            payment.setAmount(amount);
+            payment.setChannel(request.channel() == null || request.channel().isBlank()
+                    ? "PAYMENT" : request.channel());
+            payment.setChannelTxnNo(request.channelTxnNo());
+            payment.setPaidAt(LocalDateTime.now());
+            orderPaymentMapper.updateById(payment);
+            return;
+        }
+
+        OrderPayment created = new OrderPayment();
+        created.setOrderId(order.getId());
+        created.setPaymentNo(request.paymentNo());
+        created.setChannel(request.channel() == null || request.channel().isBlank()
+                ? "PAYMENT" : request.channel());
+        created.setAmount(amount);
+        created.setCurrency(order.getCurrency());
+        created.setStatus(2);
+        created.setChannelTxnNo(request.channelTxnNo());
+        created.setPaidAt(LocalDateTime.now());
+        try {
+            orderPaymentMapper.insert(created);
+        } catch (DuplicateKeyException ex) {
+            log.info("支付单重复插入，忽略 paymentNo={}", request.paymentNo());
+        }
+    }
+
+    private BigDecimal sumPaidAmount(Long orderId) {
+        BigDecimal paid = orderPaymentMapper.sumPaidAmount(orderId);
+        return paid == null ? BigDecimal.ZERO : paid;
+    }
+
     private OrderResponse persistOrder(
             CreateOrderRequest request,
             List<SkuInfo> skus,
@@ -392,6 +430,21 @@ public class OrderService {
         return get(order.getOrderNo());
     }
 
+    /**
+     * 支付中心查询订单支付状态，用于校验待支付金额并支持部分支付（定金/尾款）。
+     */
+    public OrderPaymentState getPaymentState(String orderNo) {
+        Order order = findOrder(orderNo);
+        BigDecimal paidAmount = sumPaidAmount(order.getId());
+        return new OrderPaymentState(
+                order.getOrderNo(),
+                order.getMerchantId(),
+                order.getPayAmount(),
+                order.getCurrency(),
+                paidAmount,
+                order.getStatus());
+    }
+
     public PageResult<OrderSummaryResponse> page(Long merchantId, Integer status, int page, int size) {
         LambdaQueryWrapper<Order> wrapper = new LambdaQueryWrapper<Order>()
                 .eq(Order::getDeleted, 0)
@@ -463,8 +516,9 @@ public class OrderService {
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), "订单状态不允许支付");
         }
         String channel = request.channel() == null ? "mock" : request.channel();
+        BigDecimal amount = request.amount() == null ? order.getPayAmount() : request.amount();
         PaymentClient.CreatePaymentRequest paymentRequest = new PaymentClient.CreatePaymentRequest(
-                orderNo, order.getPayAmount(), order.getCurrency(), channel, order.getMerchantId());
+                orderNo, amount, order.getCurrency(), channel, order.getMerchantId());
         PaymentClient.CreatePaymentResponse response =
                 ensureSuccessData(paymentClient.create(paymentRequest), "支付发起");
         if (response == null || response.paymentNo() == null) {
@@ -478,7 +532,7 @@ public class OrderService {
             payment.setOrderId(order.getId());
             payment.setPaymentNo(response.paymentNo());
             payment.setChannel(channel);
-            payment.setAmount(order.getPayAmount());
+            payment.setAmount(response.amount() == null ? amount : response.amount());
             payment.setCurrency(order.getCurrency());
             payment.setStatus(1);
             orderPaymentMapper.insert(payment);
@@ -573,14 +627,25 @@ public class OrderService {
             log.info("支付回调重复或状态异常，忽略 orderNo={} status={}", request.orderNo(), order.getStatus());
             return;
         }
-        // 金额校验：回调金额与应付金额不一致时忽略并告警，进入人工核对
-        if (request.amount() != null
-                && order.getPayAmount() != null
-                && request.amount().compareTo(order.getPayAmount()) != 0) {
-            log.error("支付金额不一致，忽略回调 orderNo={} expect={} actual={}",
-                    request.orderNo(), order.getPayAmount(), request.amount());
+        BigDecimal amount = request.amount();
+        BigDecimal paidBefore = sumPaidAmount(order.getId());
+        BigDecimal outstanding = order.getPayAmount().subtract(paidBefore);
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0 || amount.compareTo(outstanding) > 0) {
+            log.error("支付金额非法或超过待支付金额，忽略回调 orderNo={} amount={} outstanding={}",
+                    request.orderNo(), amount, outstanding);
             return;
         }
+
+        upsertPaidPayment(order, request, amount);
+        BigDecimal paidAfter = sumPaidAmount(order.getId());
+        if (paidAfter.compareTo(order.getPayAmount()) < 0) {
+            appendLog(order.getId(), OrderStatus.PENDING_PAYMENT, OrderStatus.PENDING_PAYMENT,
+                    null, "PAYMENT", "部分支付 " + amount);
+            log.info("部分支付，订单继续待支付 orderNo={} paid={} total={}",
+                    request.orderNo(), paidAfter, order.getPayAmount());
+            return;
+        }
+
         // 条件流转：仅待支付订单可置为已支付，防止超时取消/重复回调并发覆盖
         LocalDateTime paidAt = LocalDateTime.now();
         if (!transitIfStatus(order.getId(), OrderStatus.PENDING_PAYMENT, OrderStatus.PAID, paidAt)) {
@@ -590,17 +655,6 @@ public class OrderService {
         order.setStatus(OrderStatus.PAID);
         order.setPaidAt(paidAt);
         appendLog(order.getId(), OrderStatus.PENDING_PAYMENT, OrderStatus.PAID, null, "PAYMENT", "支付成功");
-
-        OrderPayment payment = orderPaymentMapper.selectOne(new LambdaQueryWrapper<OrderPayment>()
-                .eq(OrderPayment::getPaymentNo, request.paymentNo())
-                .last("LIMIT 1"));
-        if (payment != null) {
-            payment.setStatus(2);
-            payment.setChannelTxnNo(request.channelTxnNo());
-            payment.setPaidAt(LocalDateTime.now());
-            orderPaymentMapper.updateById(payment);
-        }
-
         try {
             inventoryClient.deduct(itemsAsStockRequest(request.orderNo(), order.getId()));
         } catch (Exception ex) {

@@ -139,6 +139,17 @@ mvn -pl oms-gateway,user-service,order-service,inventory-service,after-sales-ser
 
 签名方案、客户端配置与冒烟脚本见 `docs/open-api.md` 与 `scripts/open-api-smoke.sh`。
 
+## 支付补强：国际卡 PSP / 部分支付 / 余额支付
+
+- **国际卡 PSP**：新增 `visa`、`mastercard` 渠道适配器（当前为模拟通道，真实 PSP 证书就绪后替换 `AbstractMockCardPaymentAdapter` 内部实现即可）。
+- **部分支付（定金 + 尾款）**：同一订单允许多笔支付单，支付中心通过订单服务的 `/api/v1/orders/internal/{orderNo}/payment-state` 获取待支付金额并校验单笔金额；订单服务累计已支付金额，未付清前保持待支付，付清后扣减库存。
+- **余额支付**：新增 `balance_account` / `balance_transaction` 两张表及 `BalanceService`，商户可先充值，下单时以 `channel=balance` 直接扣减余额并生成已支付流水；余额支付退款自动回充账户。
+- **相关接口**：
+  - `GET /api/v1/balances` 查询当前商户余额
+  - `POST /api/v1/balances/recharge` 平台管理员充值
+  - `GET /api/v1/balances/transactions` 查询余额流水
+  - `POST /api/v1/payments`（`channel` 支持 `mock/visa/mastercard/balance`，`amount` 可传部分金额）
+
 ## 约定
 
 - 包结构：`controller / service / mapper / entity / dto / constant`

@@ -3,14 +3,15 @@ package com.oms.payment.service;
 import com.alibaba.csp.sentinel.annotation.SentinelResource;
 import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oms.common.core.exception.BusinessException;
 import com.oms.common.core.result.ErrorCode;
 import com.oms.common.core.result.PageResult;
+import com.oms.common.core.result.Result;
 import com.oms.payment.adapter.PaymentAdapter;
 import com.oms.payment.client.OrderClient;
+import com.oms.payment.client.OrderClient.OrderPaymentState;
 import com.oms.payment.dto.PaymentDtos.CallbackRequest;
 import com.oms.payment.dto.PaymentDtos.CreatePaymentRequest;
 import com.oms.payment.dto.PaymentDtos.CreatePaymentResponse;
@@ -25,6 +26,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -39,10 +41,12 @@ public class PaymentService {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final Set<String> SIMULATED_CHANNELS = Set.of("mock", "visa", "mastercard");
 
     private final PaymentTransactionMapper transactionMapper;
     private final PaymentNotifyLogMapper notifyLogMapper;
     private final OrderClient orderClient;
+    private final BalanceService balanceService;
     private final Map<String, PaymentAdapter> adapters;
 
     @Value("${oms.payment.mock-only:true}")
@@ -55,10 +59,12 @@ public class PaymentService {
             PaymentTransactionMapper transactionMapper,
             PaymentNotifyLogMapper notifyLogMapper,
             OrderClient orderClient,
+            BalanceService balanceService,
             List<PaymentAdapter> adapterList) {
         this.transactionMapper = transactionMapper;
         this.notifyLogMapper = notifyLogMapper;
         this.orderClient = orderClient;
+        this.balanceService = balanceService;
         this.adapters = adapterList.stream()
                 .collect(Collectors.toMap(PaymentAdapter::channel, Function.identity()));
     }
@@ -66,36 +72,41 @@ public class PaymentService {
     @SentinelResource(value = "payment.create", blockHandler = "createBlocked")
     @Transactional
     public CreatePaymentResponse create(CreatePaymentRequest request) {
-        String channel = request.channel() == null ? "mock" : request.channel();
-        if (mockOnly && !"mock".equalsIgnoreCase(channel)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "当前为模拟支付模式，仅支持 mock 渠道");
+        String channel = request.channel() == null ? "mock" : request.channel().toLowerCase();
+        boolean balance = "balance".equals(channel);
+        if (!balance && mockOnly && !SIMULATED_CHANNELS.contains(channel)) {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST.getCode(), "当前为模拟支付模式，仅支持 mock/visa/mastercard/balance 渠道");
         }
+
+        OrderPaymentState state = loadPaymentState(request.orderNo());
+        if (state.status() == null || state.status() != 1) {
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "订单状态不允许支付");
+        }
+        BigDecimal outstanding = state.payAmount().subtract(state.paidAmount());
+        BigDecimal amount = request.amount() == null ? outstanding : request.amount();
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "支付金额必须大于 0");
+        }
+        if (amount.compareTo(outstanding) > 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "支付金额超过订单待支付金额");
+        }
+
+        if (balance) {
+            return payByBalance(request, state, amount);
+        }
+
         PaymentAdapter adapter = adapters.get(channel);
         if (adapter == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "暂不支持该支付渠道");
-        }
-
-        // 幂等查询使用普通 QueryWrapper（字符串列名）：LambdaQueryWrapper 依赖
-        // MyBatis-Plus 的 lambda 缓存初始化，无法在纯单元测试环境使用
-        PaymentTransaction existing = transactionMapper.selectOne(new QueryWrapper<PaymentTransaction>()
-                .eq("order_no", request.orderNo())
-                .in("status", 1, 2)
-                .eq("deleted", 0)
-                .last("LIMIT 1"));
-        if (existing != null) {
-            if (existing.getStatus() != null && existing.getStatus() == 2) {
-                throw new BusinessException(ErrorCode.CONFLICT.getCode(), "订单已支付，不能重复创建支付单");
-            }
-            return new CreatePaymentResponse(
-                    existing.getPaymentNo(), existing.getChannel(), buildPayUrl(existing), existing.getAmount());
         }
 
         PaymentTransaction transaction = new PaymentTransaction();
         transaction.setPaymentNo(generatePaymentNo());
         transaction.setOrderNo(request.orderNo());
         transaction.setChannel(adapter.channel());
-        transaction.setAmount(request.amount() == null ? BigDecimal.ZERO : request.amount());
-        transaction.setCurrency(request.currency() == null ? defaultCurrency : request.currency());
+        transaction.setAmount(amount);
+        transaction.setCurrency(request.currency() == null ? state.currency() : request.currency());
         transaction.setStatus(1);
         transaction.setNotifyCount(0);
         transactionMapper.insert(transaction);
@@ -160,6 +171,49 @@ public class PaymentService {
         log.warn("支付回调被限流丢弃 channel={} paymentNo={}", channel, request.paymentNo());
     }
 
+    private OrderPaymentState loadPaymentState(String orderNo) {
+        Result<OrderPaymentState> result = orderClient.getPaymentState(orderNo);
+        if (result == null || !result.isSuccess() || result.data() == null) {
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "订单支付状态不可用");
+        }
+        return result.data();
+    }
+
+    /**
+     * 余额支付：直接扣减商户储值余额并生成已支付流水，不走外部渠道回调。
+     */
+    private CreatePaymentResponse payByBalance(
+            CreatePaymentRequest request, OrderPaymentState state, BigDecimal amount) {
+        String balanceBizNo = balanceService.debit(
+                state.merchantId(), amount, "订单余额支付 " + request.orderNo());
+
+        PaymentTransaction transaction = new PaymentTransaction();
+        transaction.setPaymentNo(generatePaymentNo());
+        transaction.setOrderNo(request.orderNo());
+        transaction.setChannel("balance");
+        transaction.setAmount(amount);
+        transaction.setCurrency(request.currency() == null ? state.currency() : request.currency());
+        transaction.setStatus(2);
+        transaction.setChannelTxnNo(balanceBizNo);
+        transaction.setNotifyCount(0);
+        transaction.setPaidAt(LocalDateTime.now());
+        transaction.setNotifyAt(LocalDateTime.now());
+        transactionMapper.insert(transaction);
+
+        try {
+            orderClient.notifyPaymentSuccess(new OrderClient.PaymentSuccessRequest(
+                    transaction.getOrderNo(),
+                    transaction.getPaymentNo(),
+                    transaction.getChannel(),
+                    transaction.getAmount(),
+                    balanceBizNo));
+        } catch (Exception ex) {
+            log.error("余额支付通知订单服务失败 orderNo={}", request.orderNo(), ex);
+        }
+        return new CreatePaymentResponse(
+                transaction.getPaymentNo(), "balance", null, transaction.getAmount());
+    }
+
     @Transactional
     public void refund(String paymentNo, RefundRequest request) {
         PaymentTransaction transaction = transactionMapper.selectOne(new LambdaQueryWrapper<PaymentTransaction>()
@@ -172,13 +226,17 @@ public class PaymentService {
         if (transaction.getStatus() != 2) {
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), "仅已支付订单可退款");
         }
-        if (request.amount() != null
-                && transaction.getAmount() != null
-                && request.amount().compareTo(transaction.getAmount()) > 0) {
+        BigDecimal refundAmount = request.amount() == null ? transaction.getAmount() : request.amount();
+        if (transaction.getAmount() != null && refundAmount.compareTo(transaction.getAmount()) > 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "退款金额超过支付金额");
         }
         transaction.setStatus(5);
         transactionMapper.updateById(transaction);
+
+        if ("balance".equals(transaction.getChannel())) {
+            OrderPaymentState state = loadPaymentState(transaction.getOrderNo());
+            balanceService.credit(state.merchantId(), refundAmount, "余额支付退款 " + paymentNo);
+        }
     }
 
     public PageResult<PaymentResponse> page(String orderNo, Integer status, int page, int size) {
@@ -209,13 +267,6 @@ public class PaymentService {
             notifyLog.setRequestBody(request.toString());
         }
         notifyLogMapper.insert(notifyLog);
-    }
-
-    private String buildPayUrl(PaymentTransaction transaction) {
-        return "http://localhost:8085/api/v1/payment-callbacks/mock?paymentNo="
-                + transaction.getPaymentNo()
-                + "&amount="
-                + transaction.getAmount();
     }
 
     private String generatePaymentNo() {

@@ -1,6 +1,7 @@
 package com.oms.order.controller;
 
 import com.oms.common.core.result.Result;
+import com.oms.order.dto.OrderDtos.OrderPaymentState;
 import com.oms.order.dto.OrderDtos.PaymentSuccessRequest;
 import com.oms.order.dto.OrderDtos.OrderResponse;
 import com.oms.order.service.OrderService;
@@ -31,6 +32,11 @@ public class InternalOrderController {
     @GetMapping("/{orderNo}")
     public Result<OrderResponse> getInternal(@PathVariable String orderNo) {
         return Result.ok(orderService.get(orderNo));
+    }
+
+    @GetMapping("/{orderNo}/payment-state")
+    public Result<OrderPaymentState> paymentState(@PathVariable String orderNo) {
+        return Result.ok(orderService.getPaymentState(orderNo));
     }
 
     @GetMapping("/external/{externalOrderNo}")
