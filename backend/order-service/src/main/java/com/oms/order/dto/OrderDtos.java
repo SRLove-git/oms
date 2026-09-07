@@ -87,4 +87,20 @@ public final class OrderDtos {
             BigDecimal paidAmount,
             Integer status) {
     }
+
+    public record ApprovalRequest(Integer approvalType, String requestPayload) {
+    }
+
+    public record ApprovalReviewRequest(Integer status, String requestPayload) {
+    }
+
+    public record ApprovalResponse(
+            Long id,
+            String orderNo,
+            Integer approvalType,
+            String requestPayload,
+            Integer status,
+            String operatorName,
+            LocalDateTime createdAt) {
+    }
 }

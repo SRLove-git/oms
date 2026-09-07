@@ -7,6 +7,7 @@ import com.oms.integration.dto.IntegrationDtos.LogisticsCallbackRequest;
 import com.oms.integration.dto.IntegrationDtos.LogisticsResponse;
 import com.oms.integration.entity.LogisticsTracking;
 import com.oms.integration.mapper.LogisticsTrackingMapper;
+import com.oms.integration.provider.LogisticsProvider;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
@@ -23,9 +24,12 @@ public class LogisticsService {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final LogisticsTrackingMapper trackingMapper;
+    private final LogisticsProvider logisticsProvider;
 
-    public LogisticsService(LogisticsTrackingMapper trackingMapper) {
+    public LogisticsService(
+            LogisticsTrackingMapper trackingMapper, LogisticsProvider logisticsProvider) {
         this.trackingMapper = trackingMapper;
+        this.logisticsProvider = logisticsProvider;
     }
 
     @Transactional
@@ -66,6 +70,7 @@ public class LogisticsService {
         if (tracking == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "物流轨迹不存在");
         }
+        syncFromProvider(tracking, trackingNo, carrier);
         return toResponse(tracking);
     }
 
@@ -78,7 +83,38 @@ public class LogisticsService {
         if (tracking == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "该订单暂无物流轨迹");
         }
+        syncFromProvider(tracking, tracking.getTrackingNo(), tracking.getCarrier());
         return toResponse(tracking);
+    }
+
+    private void syncFromProvider(LogisticsTracking tracking, String trackingNo, String carrier) {
+        if (!logisticsProvider.isConfigured() || trackingNo == null || carrier == null) {
+            return;
+        }
+        List<String> remoteTraces = logisticsProvider.query(trackingNo, carrier);
+        if (remoteTraces == null || remoteTraces.isEmpty()) {
+            return;
+        }
+        List<String> local = new ArrayList<>();
+        try {
+            local.addAll(MAPPER.readValue(
+                    tracking.getTraceInfo() == null ? "[]" : tracking.getTraceInfo(),
+                    new TypeReference<List<String>>() {
+                    }));
+        } catch (Exception ex) {
+            log.warn("解析本地轨迹失败: {}", tracking.getTraceInfo());
+        }
+        for (String trace : remoteTraces) {
+            if (!local.contains(trace)) {
+                local.add(trace);
+            }
+        }
+        try {
+            tracking.setTraceInfo(MAPPER.writeValueAsString(local));
+            trackingMapper.updateById(tracking);
+        } catch (Exception ex) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR);
+        }
     }
 
     private void appendTrace(LogisticsTracking tracking, String trace) {

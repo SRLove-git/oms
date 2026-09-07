@@ -166,9 +166,22 @@ export default {
     settings: 'Preferences',
   },
   payment: {
-    title: 'Mock Payment',
+    title: 'Payment Method',
     content: 'Payment No.: {paymentNo}',
     amount: 'Amount',
     confirmSuccess: 'Payment confirmed',
+    payNow: 'Pay Now',
+    channelMock: 'Mock',
+    channelVisa: 'Visa',
+    channelMastercard: 'Mastercard',
+  },
+  payResult: {
+    title: 'Payment Result',
+    success: 'Payment successful',
+    cancel: 'Payment cancelled',
+    paymentNo: 'Payment No.',
+    orderNo: 'Order No.',
+    viewOrder: 'View Order',
+    backOrders: 'Back to My Orders',
   },
 }

@@ -166,9 +166,22 @@ export default {
     settings: '偏好设置',
   },
   payment: {
-    title: '模拟支付',
+    title: '支付方式',
     content: '支付单号：{paymentNo}',
     amount: '支付金额',
     confirmSuccess: '确认支付成功',
+    payNow: '去支付',
+    channelMock: '模拟支付',
+    channelVisa: 'Visa',
+    channelMastercard: 'Mastercard',
+  },
+  payResult: {
+    title: '支付结果',
+    success: '支付成功',
+    cancel: '支付已取消',
+    paymentNo: '支付单号',
+    orderNo: '订单号',
+    viewOrder: '查看订单',
+    backOrders: '返回我的订单',
   },
 }

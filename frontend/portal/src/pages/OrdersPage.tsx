@@ -6,6 +6,7 @@ import {
   Message,
   Modal,
   Pagination,
+  Radio,
   Space,
   Table,
 } from '@arco-design/web-react'
@@ -23,9 +24,10 @@ export default function OrdersPage() {
   const [pageSize] = useState(10)
   const [detail, setDetail] = useState<OrderDetail | null>(null)
   const [detailVisible, setDetailVisible] = useState(false)
-  const [paying, setPaying] = useState<string | null>(null)
   const [payModalVisible, setPayModalVisible] = useState(false)
-  const [payInfo, setPayInfo] = useState<{ paymentNo: string; amount: string } | null>(null)
+  const [payingOrderNo, setPayingOrderNo] = useState<string | null>(null)
+  const [payChannel, setPayChannel] = useState('mock')
+  const [paySubmitting, setPaySubmitting] = useState(false)
 
   const statusName = (status: number) => t(`orders.status${status}`, { defaultValue: `#${status}` })
 
@@ -49,30 +51,35 @@ export default function OrdersPage() {
     setDetailVisible(true)
   }
 
-  async function handlePay(orderNo: string) {
-    setPaying(orderNo)
-    try {
-      const result = await payOrder(orderNo)
-      setPayInfo({ paymentNo: result.paymentNo, amount: result.amount })
-      setPayModalVisible(true)
-    } finally {
-      setPaying(null)
-    }
+  function openPay(orderNo: string) {
+    setPayingOrderNo(orderNo)
+    setPayChannel('mock')
+    setPayModalVisible(true)
   }
 
-  async function simulatePay() {
-    if (!payInfo) {
+  async function confirmPay() {
+    if (!payingOrderNo) {
       return
     }
-    await callbackMock({
-      paymentNo: payInfo.paymentNo,
-      channelTxnNo: `TXN${Date.now()}`,
-      amount: payInfo.amount,
-      status: 'SUCCESS',
-    })
-    Message.success(t('orders.paySuccess'))
-    setPayModalVisible(false)
-    load()
+    setPaySubmitting(true)
+    try {
+      const result = await payOrder(payingOrderNo, payChannel)
+      if (payChannel !== 'mock' && result.payUrl) {
+        window.location.href = result.payUrl
+        return
+      }
+      await callbackMock({
+        paymentNo: result.paymentNo,
+        channelTxnNo: `TXN${Date.now()}`,
+        amount: result.amount,
+        status: 'SUCCESS',
+      })
+      Message.success(t('orders.paySuccess'))
+      setPayModalVisible(false)
+      load()
+    } finally {
+      setPaySubmitting(false)
+    }
   }
 
   function handleCancel(orderNo: string) {
@@ -124,8 +131,7 @@ export default function OrdersPage() {
                     <Button
                       size="mini"
                       type="primary"
-                      loading={paying === record.orderNo}
-                      onClick={() => handlePay(record.orderNo)}
+                      onClick={() => openPay(record.orderNo)}
                     >
                       {t('orders.pay')}
                     </Button>
@@ -194,14 +200,17 @@ export default function OrdersPage() {
 
       <Modal
         visible={payModalVisible}
-        title={t('orders.simulatePay')}
-        okText={t('orders.simulatePayOk')}
+        title={t('orders.payTitle')}
+        okText={t('orders.payNow')}
+        confirmLoading={paySubmitting}
         onCancel={() => setPayModalVisible(false)}
-        onOk={simulatePay}
+        onOk={confirmPay}
       >
-        {t('orders.paymentNo')}：{payInfo?.paymentNo}
-        <br />
-        {t('orders.paymentAmount')}：{payInfo?.amount} SGD
+        <Radio.Group type="button" value={payChannel} onChange={(value) => setPayChannel(value)}>
+          <Radio value="mock">{t('orders.channelMock')}</Radio>
+          <Radio value="visa">{t('orders.channelVisa')}</Radio>
+          <Radio value="mastercard">{t('orders.channelMastercard')}</Radio>
+        </Radio.Group>
       </Modal>
     </Card>
   )

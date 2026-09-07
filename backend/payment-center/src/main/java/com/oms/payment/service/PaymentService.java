@@ -21,6 +21,7 @@ import com.oms.payment.entity.PaymentNotifyLog;
 import com.oms.payment.entity.PaymentTransaction;
 import com.oms.payment.mapper.PaymentNotifyLogMapper;
 import com.oms.payment.mapper.PaymentTransactionMapper;
+import com.oms.payment.psp.CardWebhookEvent;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -103,6 +104,7 @@ public class PaymentService {
 
         PaymentTransaction transaction = new PaymentTransaction();
         transaction.setPaymentNo(generatePaymentNo());
+        transaction.setIdempotencyKey(transaction.getPaymentNo());
         transaction.setOrderNo(request.orderNo());
         transaction.setChannel(adapter.channel());
         transaction.setAmount(amount);
@@ -140,24 +142,36 @@ public class PaymentService {
             throw ex;
         }
 
-        transaction.setStatus(2);
-        transaction.setChannelTxnNo(request.channelTxnNo());
-        transaction.setPaidAt(LocalDateTime.now());
-        transaction.setNotifyCount(transaction.getNotifyCount() + 1);
-        transaction.setNotifyAt(LocalDateTime.now());
-        transactionMapper.updateById(transaction);
-        recordNotifyLog(request, transaction, 1, "SUCCESS");
+        completePayment(transaction, request.channelTxnNo(), request);
+    }
 
-        try {
-            orderClient.notifyPaymentSuccess(new OrderClient.PaymentSuccessRequest(
-                    transaction.getOrderNo(),
-                    transaction.getPaymentNo(),
-                    transaction.getChannel(),
-                    transaction.getAmount(),
-                    request.channelTxnNo()));
-        } catch (Exception ex) {
-            log.error("通知订单服务支付成功失败 paymentNo={}", transaction.getPaymentNo(), ex);
+    /**
+     * 国际卡 PSP 签名回调处理：签名已在适配层校验，这里复核金额/币种并完成支付。
+     */
+    @Transactional
+    public void handleCardWebhook(CardWebhookEvent event) {
+        PaymentTransaction transaction = transactionMapper.selectOne(new LambdaQueryWrapper<PaymentTransaction>()
+                .eq(PaymentTransaction::getPaymentNo, event.paymentNo())
+                .eq(PaymentTransaction::getDeleted, 0)
+                .last("LIMIT 1"));
+        if (transaction == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "支付单不存在");
         }
+        if (transaction.getStatus() != null && transaction.getStatus() == 2) {
+            log.info("国际卡支付回调重复，忽略 paymentNo={}", event.paymentNo());
+            return;
+        }
+        if (event.amount() == null || transaction.getAmount().compareTo(event.amount()) != 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "回调金额与支付单不一致");
+        }
+        if (event.currency() != null && !event.currency().equalsIgnoreCase(transaction.getCurrency())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "回调币种与支付单不一致");
+        }
+
+        completePayment(
+                transaction,
+                event.channelTxnNo(),
+                new CallbackRequest(event.paymentNo(), event.channelTxnNo(), event.amount(), "SUCCESS"));
     }
 
     public CreatePaymentResponse createBlocked(CreatePaymentRequest request, BlockException ex) {
@@ -230,13 +244,24 @@ public class PaymentService {
         if (transaction.getAmount() != null && refundAmount.compareTo(transaction.getAmount()) > 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "退款金额超过支付金额");
         }
-        transaction.setStatus(5);
-        transactionMapper.updateById(transaction);
 
         if ("balance".equals(transaction.getChannel())) {
             OrderPaymentState state = loadPaymentState(transaction.getOrderNo());
             balanceService.credit(state.merchantId(), refundAmount, "余额支付退款 " + paymentNo);
+        } else {
+            PaymentAdapter adapter = adapters.get(transaction.getChannel());
+            if (adapter == null) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "暂不支持该支付渠道退款");
+            }
+            String refundRef = adapter.refund(transaction, new RefundRequest(refundAmount, request.method()));
+            log.info(
+                    "渠道退款完成 paymentNo={} channel={} refundRef={}",
+                    paymentNo,
+                    transaction.getChannel(),
+                    refundRef);
         }
+        transaction.setStatus(5);
+        transactionMapper.updateById(transaction);
     }
 
     public PageResult<PaymentResponse> page(String orderNo, Integer status, int page, int size) {
@@ -267,6 +292,27 @@ public class PaymentService {
             notifyLog.setRequestBody(request.toString());
         }
         notifyLogMapper.insert(notifyLog);
+    }
+
+    private void completePayment(PaymentTransaction transaction, String channelTxnNo, CallbackRequest request) {
+        transaction.setStatus(2);
+        transaction.setChannelTxnNo(channelTxnNo);
+        transaction.setPaidAt(LocalDateTime.now());
+        transaction.setNotifyCount(transaction.getNotifyCount() + 1);
+        transaction.setNotifyAt(LocalDateTime.now());
+        transactionMapper.updateById(transaction);
+        recordNotifyLog(request, transaction, 1, "SUCCESS");
+
+        try {
+            orderClient.notifyPaymentSuccess(new OrderClient.PaymentSuccessRequest(
+                    transaction.getOrderNo(),
+                    transaction.getPaymentNo(),
+                    transaction.getChannel(),
+                    transaction.getAmount(),
+                    channelTxnNo));
+        } catch (Exception ex) {
+            log.error("通知订单服务支付成功失败 paymentNo={}", transaction.getPaymentNo(), ex);
+        }
     }
 
     private String generatePaymentNo() {

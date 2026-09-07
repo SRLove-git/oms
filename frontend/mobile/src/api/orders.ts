@@ -59,10 +59,10 @@ export async function getOrder(orderNo: string) {
   return res.data.data
 }
 
-export async function payOrder(orderNo: string) {
+export async function payOrder(orderNo: string, channel = 'mock') {
   const res = await request.post<
     ApiResult<{ paymentNo: string; channel: string; payUrl: string; amount: string }>
-  >(`/orders/${orderNo}/pay`, { channel: 'mock' })
+  >(`/orders/${orderNo}/pay`, { channel })
   return res.data.data
 }
 

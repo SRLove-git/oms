@@ -13,6 +13,7 @@ import com.oms.integration.entity.NotificationMessage;
 import com.oms.integration.entity.NotificationTemplate;
 import com.oms.integration.mapper.NotificationMessageMapper;
 import com.oms.integration.mapper.NotificationTemplateMapper;
+import com.oms.integration.provider.NotificationProvider;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -31,11 +32,15 @@ public class NotificationService {
 
     private final NotificationTemplateMapper templateMapper;
     private final NotificationMessageMapper messageMapper;
+    private final NotificationProvider provider;
 
     public NotificationService(
-            NotificationTemplateMapper templateMapper, NotificationMessageMapper messageMapper) {
+            NotificationTemplateMapper templateMapper,
+            NotificationMessageMapper messageMapper,
+            NotificationProvider provider) {
         this.templateMapper = templateMapper;
         this.messageMapper = messageMapper;
+        this.provider = provider;
     }
 
     @Transactional
@@ -97,12 +102,17 @@ public class NotificationService {
         message.setReceiver(request.receiver());
         message.setTitle(request.title());
         message.setContent(request.content());
-        if (request.receiver().startsWith("fail:")) {
-            message.setStatus(2);
-            message.setErrorMessage("模拟渠道发送失败");
-        } else {
+        try {
+            if (provider.isConfigured()) {
+                provider.send(message);
+            } else if (request.receiver().startsWith("fail:")) {
+                throw new IllegalStateException("模拟渠道发送失败");
+            }
             message.setStatus(1);
             message.setSentAt(LocalDateTime.now());
+        } catch (Exception ex) {
+            message.setStatus(2);
+            message.setErrorMessage(ex.getMessage());
         }
         messageMapper.insert(message);
         return toMessageResponse(message);
@@ -137,12 +147,17 @@ public class NotificationService {
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), "重试次数已达上限");
         }
         message.setRetryCount(message.getRetryCount() + 1);
-        if (message.getReceiver().startsWith("fail:")) {
-            message.setErrorMessage("模拟渠道再次失败，retry=" + message.getRetryCount());
-        } else {
+        try {
+            if (provider.isConfigured()) {
+                provider.send(message);
+            } else if (message.getReceiver().startsWith("fail:")) {
+                throw new IllegalStateException("模拟渠道再次失败");
+            }
             message.setStatus(1);
             message.setErrorMessage(null);
             message.setSentAt(LocalDateTime.now());
+        } catch (Exception ex) {
+            message.setErrorMessage("发送失败，retry=" + message.getRetryCount() + ": " + ex.getMessage());
         }
         messageMapper.updateById(message);
         return toMessageResponse(message);

@@ -7,6 +7,9 @@ import com.oms.common.core.exception.BusinessException;
 import com.oms.common.core.result.ErrorCode;
 import com.oms.common.core.result.PageResult;
 import com.oms.inventory.dto.InventoryDtos.InboundRequest;
+import com.oms.inventory.dto.InventoryDtos.InventoryAlertResponse;
+import com.oms.inventory.dto.InventoryDtos.TraceItem;
+import com.oms.inventory.dto.InventoryDtos.TraceResponse;
 import com.oms.inventory.dto.InventoryDtos.InventoryResponse;
 import com.oms.inventory.dto.InventoryDtos.ReserveItem;
 import com.oms.inventory.dto.InventoryDtos.ReserveRequest;
@@ -18,6 +21,7 @@ import com.oms.inventory.mapper.InventoryMapper;
 import com.oms.inventory.mapper.InventoryTransactionMapper;
 import com.oms.inventory.mapper.SkuMapper;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -25,6 +29,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.beans.factory.annotation.Value;
 
 @Service
 public class InventoryService {
@@ -38,6 +43,12 @@ public class InventoryService {
     private final InventoryMapper inventoryMapper;
     private final InventoryTransactionMapper transactionMapper;
     private final SkuMapper skuMapper;
+
+    @Value("${oms.inventory.low-stock-threshold:5}")
+    private int lowStockThreshold;
+
+    @Value("${oms.inventory.expiry-warning-days:90}")
+    private int expiryWarningDays;
 
     public InventoryService(
             InventoryMapper inventoryMapper,
@@ -217,6 +228,64 @@ public class InventoryService {
                 .stream()
                 .collect(Collectors.groupingBy(
                         Inventory::getSkuId, Collectors.summingInt(Inventory::getQuantity)));
+    }
+
+    public List<InventoryAlertResponse> alerts() {
+        List<Inventory> rows = inventoryMapper.selectList(new LambdaQueryWrapper<Inventory>()
+                .eq(Inventory::getDeleted, 0));
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, Sku> skuMap = skuMapper.selectBatchIds(
+                        rows.stream().map(Inventory::getSkuId).distinct().toList())
+                .stream().collect(Collectors.toMap(Sku::getId, Function.identity()));
+        Map<Long, Integer> available = availableStocks(new java.util.ArrayList<>(skuMap.keySet()));
+        LocalDate expiryLimit = LocalDate.now().plusDays(expiryWarningDays);
+
+        List<InventoryAlertResponse> alerts = new java.util.ArrayList<>();
+        for (Long skuId : skuMap.keySet()) {
+            Sku sku = skuMap.get(skuId);
+            int stock = available.getOrDefault(skuId, 0);
+            if (stock < lowStockThreshold) {
+                alerts.add(new InventoryAlertResponse(
+                        skuId, sku.getSkuNo(), sku.getName(), stock,
+                        "LOW_STOCK", "库存低于安全阈值 " + lowStockThreshold));
+            }
+            boolean expiring = rows.stream()
+                    .filter(row -> skuId.equals(row.getSkuId()))
+                    .anyMatch(row -> row.getExpireAt() != null && !row.getExpireAt().isAfter(expiryLimit));
+            if (expiring) {
+                alerts.add(new InventoryAlertResponse(
+                        skuId, sku.getSkuNo(), sku.getName(), stock,
+                        "EXPIRING", "存在 " + expiryWarningDays + " 天内临期批次"));
+            }
+        }
+        return alerts;
+    }
+
+    public TraceResponse traceByUdi(String udi) {
+        Sku sku = skuMapper.selectOne(new LambdaQueryWrapper<Sku>()
+                .eq(Sku::getUdi, udi)
+                .eq(Sku::getDeleted, 0)
+                .last("LIMIT 1"));
+        if (sku == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "UDI 不存在");
+        }
+        List<Inventory> rows = inventoryMapper.selectList(new LambdaQueryWrapper<Inventory>()
+                .eq(Inventory::getSkuId, sku.getId())
+                .eq(Inventory::getDeleted, 0)
+                .orderByAsc(Inventory::getExpireAt));
+        return new TraceResponse(
+                sku.getId(),
+                sku.getSkuNo(),
+                sku.getName(),
+                sku.getUdi(),
+                sku.getRegistrationNo(),
+                rows.stream()
+                        .map(row -> new TraceItem(
+                                row.getId(), row.getWarehouseId(), row.getBatchNo(),
+                                row.getQuantity(), row.getExpireAt()))
+                        .toList());
     }
 
     public PageResult<TransactionResponse> pageTransactions(Long skuId, String bizNo, int page, int size) {        LambdaQueryWrapper<InventoryTransaction> wrapper = new LambdaQueryWrapper<InventoryTransaction>()

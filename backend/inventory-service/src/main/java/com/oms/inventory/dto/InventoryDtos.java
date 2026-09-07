@@ -45,4 +45,63 @@ public final class InventoryDtos {
             String remark,
             LocalDateTime createdAt) {
     }
+
+    public record InventoryAlertResponse(
+            Long skuId,
+            String skuNo,
+            String skuName,
+            int availableStock,
+            String alertType,
+            String message) {
+    }
+
+    public record StockTakeItemRequest(Long skuId, Integer expectedQuantity, Integer actualQuantity) {
+    }
+
+    public record StockTakeRequest(Long warehouseId, String remark, List<StockTakeItemRequest> items) {
+    }
+
+    public record StockTakeItemResponse(
+            Long id,
+            Long takeId,
+            Long skuId,
+            Integer expectedQuantity,
+            Integer actualQuantity) {
+    }
+
+    public record StockTakeResponse(
+            Long id,
+            String takeNo,
+            Long warehouseId,
+            Integer status,
+            String remark,
+            List<StockTakeItemResponse> items) {
+    }
+
+    public record WaveCreateRequest(String orderNo, Long skuId, Integer quantity) {
+    }
+
+    public record WaveStatusRequest(Integer status) {
+    }
+
+    public record WaveResponse(
+            Long id,
+            String waveNo,
+            String orderNo,
+            Long skuId,
+            Integer quantity,
+            Integer status) {
+    }
+
+    public record TraceItem(Long inventoryId, Long warehouseId, String batchNo, Integer quantity, LocalDate expireAt) {
+    }
+
+    public record TraceResponse(
+            Long skuId,
+            String skuNo,
+            String skuName,
+            String udi,
+            String registrationNo,
+            List<TraceItem> batches) {
+    }
 }

@@ -68,6 +68,7 @@ logging:
 oms:
   callback:
     base-url: ${OMS_MALL_CALLBACK_URL:http://localhost:8090}
+    secret: ${OMS_MALL_CALLBACK_SECRET:demo-mall-callback-secret-change-me}
   order:
     timeout-minutes: ${OMS_ORDER_TIMEOUT_MINUTES:30}
     timeout-scan-ms: ${OMS_ORDER_TIMEOUT_SCAN_MS:60000}

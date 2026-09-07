@@ -2,25 +2,22 @@
   <a-modal
     :visible="visible"
     :title="t('payment.title')"
-    :ok-text="t('orders.simulatePay')"
+    :ok-text="t('payment.payNow')"
+    :ok-button-props="{ loading }"
     :cancel-text="t('common.cancel')"
-    :ok-button-props="{ disabled: !payInfo }"
     @cancel="handleCancel"
     @ok="handleOk"
   >
-    <div v-if="loading">{{ t('common.loading') }}</div>
-    <template v-else>
-      <div>{{ t('payment.content', { paymentNo: payInfo?.paymentNo ?? '-' }) }}</div>
-      <div class="mt-8">
-        {{ t('payment.amount') }}：
-        <span class="text-price">S${{ payInfo ? formatPrice(payInfo.amount) : '-' }}</span>
-      </div>
-    </template>
+    <a-radio-group v-model="channel" type="button" class="pay-channel">
+      <a-radio value="mock">{{ t('payment.channelMock') }}</a-radio>
+      <a-radio value="visa">{{ t('payment.channelVisa') }}</a-radio>
+      <a-radio value="mastercard">{{ t('payment.channelMastercard') }}</a-radio>
+    </a-radio-group>
   </a-modal>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { useI18n } from 'vue-i18n'
 
@@ -37,46 +34,25 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-
+const channel = ref('mock')
 const loading = ref(false)
-const payInfo = ref<{ paymentNo: string; amount: string } | null>(null)
-
-function formatPrice(value: string) {
-  return Number(value).toFixed(2)
-}
-
-watch(
-  () => props.visible,
-  async (visible) => {
-    if (!visible) {
-      return
-    }
-    loading.value = true
-    payInfo.value = null
-    try {
-      const result = await payOrder(props.orderNo)
-      payInfo.value = { paymentNo: result.paymentNo, amount: result.amount }
-    } catch {
-      Message.error(t('orders.payFailed'))
-    } finally {
-      loading.value = false
-    }
-  },
-)
 
 function handleCancel() {
   emit('update:visible', false)
 }
 
 async function handleOk() {
-  if (!payInfo.value) {
-    return
-  }
+  loading.value = true
   try {
+    const result = await payOrder(props.orderNo, channel.value)
+    if (channel.value !== 'mock' && result.payUrl) {
+      window.location.href = result.payUrl
+      return
+    }
     await callbackMock({
-      paymentNo: payInfo.value.paymentNo,
+      paymentNo: result.paymentNo,
       channelTxnNo: `TXN${Date.now()}`,
-      amount: payInfo.value.amount,
+      amount: result.amount,
       status: 'SUCCESS',
     })
     Message.success(t('orders.paySuccess'))
@@ -84,6 +60,14 @@ async function handleOk() {
     emit('success')
   } catch {
     Message.error(t('orders.payFailed'))
+  } finally {
+    loading.value = false
   }
 }
 </script>
+
+<style scoped>
+.pay-channel {
+  width: 100%;
+}
+</style>

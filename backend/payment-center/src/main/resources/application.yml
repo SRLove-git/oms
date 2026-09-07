@@ -68,3 +68,30 @@ logging:
 oms:
   payment:
     mock-only: ${OMS_PAYMENT_MOCK_ONLY:true}
+    card:
+      provider: ${OMS_CARD_PROVIDER:stripe}
+      secret-key: ${OMS_CARD_SECRET_KEY:}
+      webhook-secret: ${OMS_CARD_WEBHOOK_SECRET:}
+      api-base-url: ${OMS_CARD_API_BASE_URL:https://api.stripe.com}
+      return-url-base: ${OMS_CARD_RETURN_URL_BASE:http://localhost:5175}
+      success-path: ${OMS_CARD_SUCCESS_PATH:/pay/result?status=success}
+      cancel-path: ${OMS_CARD_CANCEL_PATH:/pay/result?status=cancel}
+    wechat:
+      mock-only: ${OMS_PAYMENT_WECHAT_MOCK_ONLY:true}
+      mch-id: ${OMS_PAYMENT_WECHAT_MCH_ID:}
+      app-id: ${OMS_PAYMENT_WECHAT_APP_ID:}
+      serial-no: ${OMS_PAYMENT_WECHAT_SERIAL_NO:}
+      private-key: ${OMS_PAYMENT_WECHAT_PRIVATE_KEY:}
+      api-v3-key: ${OMS_PAYMENT_WECHAT_API_V3_KEY:}
+      platform-public-key: ${OMS_PAYMENT_WECHAT_PLATFORM_PUBLIC_KEY:}
+      platform-serial-no: ${OMS_PAYMENT_WECHAT_PLATFORM_SERIAL_NO:}
+      notify-url: ${OMS_PAYMENT_WECHAT_NOTIFY_URL:}
+      gateway-url: ${OMS_PAYMENT_WECHAT_GATEWAY_URL:https://api.mch.weixin.qq.com}
+    alipay:
+      mock-only: ${OMS_PAYMENT_ALIPAY_MOCK_ONLY:true}
+      app-id: ${OMS_PAYMENT_ALIPAY_APP_ID:}
+      private-key: ${OMS_PAYMENT_ALIPAY_PRIVATE_KEY:}
+      alipay-public-key: ${OMS_PAYMENT_ALIPAY_PUBLIC_KEY:}
+      notify-url: ${OMS_PAYMENT_ALIPAY_NOTIFY_URL:}
+      return-url: ${OMS_PAYMENT_ALIPAY_RETURN_URL:}
+      gateway-url: ${OMS_PAYMENT_ALIPAY_GATEWAY_URL:https://openapi.alipay.com/gateway.do}

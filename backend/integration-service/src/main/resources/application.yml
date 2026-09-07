@@ -55,3 +55,18 @@ management:
 logging:
   level:
     com.oms: ${LOG_LEVEL:INFO}
+
+oms:
+  integration:
+    notification:
+      mock-only: ${OMS_INTEGRATION_NOTIFICATION_MOCK_ONLY:true}
+      base-url: ${OMS_INTEGRATION_NOTIFICATION_BASE_URL:}
+      api-key: ${OMS_INTEGRATION_NOTIFICATION_API_KEY:}
+    logistics:
+      mock-only: ${OMS_INTEGRATION_LOGISTICS_MOCK_ONLY:true}
+      base-url: ${OMS_INTEGRATION_LOGISTICS_BASE_URL:}
+      api-key: ${OMS_INTEGRATION_LOGISTICS_API_KEY:}
+    platform:
+      mock-only: ${OMS_INTEGRATION_PLATFORM_MOCK_ONLY:true}
+      base-url: ${OMS_INTEGRATION_PLATFORM_BASE_URL:}
+      api-key: ${OMS_INTEGRATION_PLATFORM_API_KEY:}

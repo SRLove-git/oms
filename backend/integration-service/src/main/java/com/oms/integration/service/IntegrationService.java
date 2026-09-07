@@ -12,6 +12,7 @@ import com.oms.integration.dto.IntegrationDtos.SyncShipmentRequest;
 import com.oms.integration.dto.IntegrationDtos.SyncStockRequest;
 import com.oms.integration.entity.ExternalOrderMapping;
 import com.oms.integration.mapper.ExternalOrderMappingMapper;
+import com.oms.integration.provider.PlatformProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,15 +25,21 @@ public class IntegrationService {
     private static final int STATUS_ERROR = 4;
 
     private final ExternalOrderMappingMapper mappingMapper;
+    private final PlatformProvider platformProvider;
 
-    public IntegrationService(ExternalOrderMappingMapper mappingMapper) {
+    public IntegrationService(
+            ExternalOrderMappingMapper mappingMapper, PlatformProvider platformProvider) {
         this.mappingMapper = mappingMapper;
+        this.platformProvider = platformProvider;
     }
 
     @Transactional
     public ExternalOrderMappingResponse pullOrder(ExternalOrderPullRequest request) {
         if (request.platform() == null || request.platformOrderNo() == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "platform 与 platformOrderNo 必填");
+        }
+        if (platformProvider.isConfigured()) {
+            platformProvider.pullOrder(request);
         }
         ExternalOrderMapping existing = mappingMapper.selectOne(new LambdaQueryWrapper<ExternalOrderMapping>()
                 .eq(ExternalOrderMapping::getPlatform, request.platform())
@@ -75,6 +82,9 @@ public class IntegrationService {
 
     @Transactional
     public void syncShipment(SyncShipmentRequest request) {
+        if (platformProvider.isConfigured()) {
+            platformProvider.syncShipment(request);
+        }
         ExternalOrderMapping mapping = findMapping(request.platform(), request.platformOrderNo());
         mapping.setStatus(STATUS_SYNCED);
         mappingMapper.updateById(mapping);
@@ -82,12 +92,18 @@ public class IntegrationService {
 
     @Transactional
     public void syncAfterSales(SyncAfterSalesRequest request) {
+        if (platformProvider.isConfigured()) {
+            platformProvider.syncAfterSales(request);
+        }
         ExternalOrderMapping mapping = findMapping(request.platform(), request.platformOrderNo());
         mapping.setStatus(STATUS_SYNCED);
         mappingMapper.updateById(mapping);
     }
 
     public void syncStock(SyncStockRequest request) {
+        if (platformProvider.isConfigured()) {
+            platformProvider.syncStock(request);
+        }
         // 第三方平台库存同步为演示接口：真实场景对接平台库存 API
         if (request.skuNo() == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "skuNo 必填");

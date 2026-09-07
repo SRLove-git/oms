@@ -141,7 +141,7 @@ mvn -pl oms-gateway,user-service,order-service,inventory-service,after-sales-ser
 
 ## 支付补强：国际卡 PSP / 部分支付 / 余额支付
 
-- **国际卡 PSP**：新增 `visa`、`mastercard` 渠道适配器（当前为模拟通道，真实 PSP 证书就绪后替换 `AbstractMockCardPaymentAdapter` 内部实现即可）。
+- **国际卡 PSP**：新增 `visa`、`mastercard` 渠道适配器；默认模拟通道，配置真实 PSP 密钥并关闭 `mock-only` 后自动切换为 Stripe 托管结算页（`AbstractCardPaymentAdapter` 内部按配置分流）。真实卡支付链路：`POST /api/v1/payments` 返回 `payUrl` → 前端跳转托管页 → PSP 签名回调 `POST /api/v1/payment-callbacks/card/webhook` → 验签后完成支付；退款通过 `POST /api/v1/payments/{paymentNo}/refund` 调 PSP 退款。
 - **部分支付（定金 + 尾款）**：同一订单允许多笔支付单，支付中心通过订单服务的 `/api/v1/orders/internal/{orderNo}/payment-state` 获取待支付金额并校验单笔金额；订单服务累计已支付金额，未付清前保持待支付，付清后扣减库存。
 - **余额支付**：新增 `balance_account` / `balance_transaction` 两张表及 `BalanceService`，商户可先充值，下单时以 `channel=balance` 直接扣减余额并生成已支付流水；余额支付退款自动回充账户。
 - **相关接口**：
@@ -149,6 +149,11 @@ mvn -pl oms-gateway,user-service,order-service,inventory-service,after-sales-ser
   - `POST /api/v1/balances/recharge` 平台管理员充值
   - `GET /api/v1/balances/transactions` 查询余额流水
   - `POST /api/v1/payments`（`channel` 支持 `mock/visa/mastercard/balance`，`amount` 可传部分金额）
+
+- **国际卡真实渠道配置**（`payment-center` 环境变量）：
+  - `OMS_PAYMENT_MOCK_ONLY=false`
+  - `OMS_CARD_SECRET_KEY`、`OMS_CARD_WEBHOOK_SECRET`（Stripe 参考实现；换 PSP 时替换 `StripeCardPspClient` 内部 HTTP 调用即可）
+  - 可选：`OMS_CARD_API_BASE_URL`、`OMS_CARD_RETURN_URL_BASE`、`OMS_CARD_SUCCESS_PATH`、`OMS_CARD_CANCEL_PATH`
 
 ## 约定
 

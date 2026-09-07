@@ -549,6 +549,7 @@ public class AfterSalesService {
     private void notifyMall(ReturnOrder returnOrder) {
         bestEffort(() -> mallCallbackNotifier.notifyAfterSaleStatus(
                 returnOrder.getOrderNo(),
+                null,
                 returnOrder.getReturnNo(),
                 returnOrder.getStatus(),
                 "aftersale.updated"));

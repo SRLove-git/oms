@@ -62,6 +62,12 @@ const router = createRouter({
       meta: { title: 'orders.detail' },
     },
     {
+      path: '/pay/result',
+      name: 'pay-result',
+      component: () => import('@/views/PayResultView.vue'),
+      meta: { title: 'payResult.title' },
+    },
+    {
       path: '/aftersales/apply',
       name: 'aftersales-apply',
       component: () => import('@/views/AfterSalesApplyView.vue'),

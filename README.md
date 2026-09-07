@@ -65,6 +65,7 @@ pnpm dev
 - 商品与库存：SPU/SKU、仓库、入库、FEFO 预占/释放/扣减/回补、库存流水
 - 订单：下单 → 待支付 → 支付回调 → 审核 → 发货 → 签收 → 完成，超时自动取消并释放库存
 - 支付：聚合支付适配器（mock/wechat/alipay），回调验签与幂等，退款
+- 真实渠道适配：微信/支付宝 Native/Page Pay 适配器、国际卡 Stripe、短信/邮件/微信、物流轨迹、第三方平台均支持环境变量配置真实服务商，默认 mock 回退
 - 前端：管理端 9 个页面（订单/商品/库存/支付/商户/资质/用户/审计），门户端商品下单与我的订单
 - 演示账号：管理端 `admin/admin123`，商户端 `merchant/merchant123`
 - 端到端验证：`./scripts/e2e-smoke.sh`（下单 → 支付 → 发货 → 签收 → 完成全链路）
@@ -120,7 +121,7 @@ pnpm dev
 
 ## 支付补强（国际卡 / 部分支付 / 余额）已交付
 
-- 国际卡 PSP：新增 Visa / Mastercard 渠道适配器（mock 通道，真实 PSP 证书就绪后替换内部实现）
+- 国际卡 PSP：新增 Visa / Mastercard 渠道适配器（默认 mock；配置真实 PSP 密钥并关闭 `mock-only` 后走 Stripe 托管结算页，含签名回调验签与退款）
 - 部分支付：订单支持多笔支付（定金 + 尾款），支付中心校验待支付金额，订单服务累计已付金额，付清后扣减库存
 - 余额支付：新增商户余额账户与流水，支持充值、余额支付、余额退款回充
 - 相关说明见 [backend/README.md](./backend/README.md) 与 [支付中心适配器目录](./backend/payment-center/src/main/java/com/oms/payment/adapter/)

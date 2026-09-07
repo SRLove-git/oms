@@ -5,6 +5,7 @@ import BasicLayout from '@/layouts/BasicLayout'
 import HomePage from '@/pages/HomePage'
 import LoginPage from '@/pages/LoginPage'
 import OrdersPage from '@/pages/OrdersPage'
+import PayResultPage from '@/pages/PayResultPage'
 import ProductsPage from '@/pages/ProductsPage'
 import AfterSalesPage from '@/pages/AfterSalesPage'
 
@@ -21,6 +22,10 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/pay/result',
+    element: <PayResultPage />,
   },
   {
     path: '/',

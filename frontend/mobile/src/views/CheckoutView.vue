@@ -60,19 +60,12 @@
     </template>
   </FullPage>
 
-  <a-modal
+  <PayModal
     :visible="payVisible"
-    :title="t('payment.title')"
-    :ok-text="t('orders.simulatePay')"
-    :cancel-text="t('common.cancel')"
-    @cancel="payVisible = false"
-    @ok="simulatePay"
-  >
-    <div>{{ t('payment.content', { paymentNo: payInfo?.paymentNo ?? '-' }) }}</div>
-    <div class="mt-8">
-      {{ t('payment.amount') }}：<span class="text-price">S${{ payAmountText }}</span>
-    </div>
-  </a-modal>
+    :order-no="createdOrder?.orderNo ?? ''"
+    @update:visible="payVisible = $event"
+    @success="handlePaySuccess"
+  />
 </template>
 
 <script setup lang="ts">
@@ -82,11 +75,12 @@ import { IconCheckCircleFill } from '@arco-design/web-vue/es/icon'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
-import { callbackMock, createOrder, payOrder } from '@/api/orders'
+import { createOrder } from '@/api/orders'
 import type { OrderDetail } from '@/api/orders'
 import { getSku } from '@/api/skus'
 import type { SkuRecord } from '@/api/skus'
 import FullPage from '@/components/FullPage.vue'
+import PayModal from '@/components/PayModal.vue'
 import { useUserStore } from '@/stores/user'
 
 const { t } = useI18n()
@@ -102,9 +96,6 @@ const remark = ref('')
 const createdOrder = ref<OrderDetail | null>(null)
 
 const payVisible = ref(false)
-const payInfo = ref<{ paymentNo: string; amount: string } | null>(null)
-
-const payAmountText = computed(() => (payInfo.value ? formatPrice(payInfo.value.amount) : '-'))
 
 const totalAmount = computed(() => {
   if (!sku.value) {
@@ -138,37 +129,15 @@ async function submit() {
   }
 }
 
-async function openPay() {
-  if (!createdOrder.value) {
-    return
-  }
-  try {
-    const result = await payOrder(createdOrder.value.orderNo)
-    payInfo.value = { paymentNo: result.paymentNo, amount: result.amount }
+function openPay() {
+  if (createdOrder.value) {
     payVisible.value = true
-  } catch {
-    Message.error(t('orders.payFailed'))
   }
 }
 
-async function simulatePay() {
-  if (!payInfo.value) {
-    return
-  }
-  try {
-    await callbackMock({
-      paymentNo: payInfo.value.paymentNo,
-      channelTxnNo: `TXN${Date.now()}`,
-      amount: payInfo.value.amount,
-      status: 'SUCCESS',
-    })
-    Message.success(t('orders.paySuccess'))
-    payVisible.value = false
-    if (createdOrder.value) {
-      router.replace({ name: 'order-detail', params: { orderNo: createdOrder.value.orderNo } })
-    }
-  } catch {
-    Message.error(t('orders.payFailed'))
+function handlePaySuccess() {
+  if (createdOrder.value) {
+    router.replace({ name: 'order-detail', params: { orderNo: createdOrder.value.orderNo } })
   }
 }
 

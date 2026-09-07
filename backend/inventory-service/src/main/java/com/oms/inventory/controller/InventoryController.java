@@ -3,6 +3,8 @@ package com.oms.inventory.controller;
 import com.oms.common.core.result.PageResult;
 import com.oms.common.core.result.Result;
 import com.oms.inventory.dto.InventoryDtos.InboundRequest;
+import com.oms.inventory.dto.InventoryDtos.InventoryAlertResponse;
+import com.oms.inventory.dto.InventoryDtos.TraceResponse;
 import com.oms.inventory.dto.InventoryDtos.InventoryResponse;
 import com.oms.inventory.dto.InventoryDtos.ReserveRequest;
 import com.oms.inventory.service.InventoryService;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/inventories")
@@ -71,5 +74,15 @@ public class InventoryController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
         return Result.ok(inventoryService.page(warehouseId, skuId, page, size));
+    }
+
+    @GetMapping("/alerts")
+    public Result<List<InventoryAlertResponse>> alerts() {
+        return Result.ok(inventoryService.alerts());
+    }
+
+    @GetMapping("/trace")
+    public Result<TraceResponse> trace(@RequestParam String udi) {
+        return Result.ok(inventoryService.traceByUdi(udi));
     }
 }

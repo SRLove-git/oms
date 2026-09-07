@@ -60,3 +60,8 @@ management:
 logging:
   level:
     com.oms: ${LOG_LEVEL:INFO}
+
+oms:
+  inventory:
+    low-stock-threshold: ${OMS_INVENTORY_LOW_STOCK_THRESHOLD:5}
+    expiry-warning-days: ${OMS_INVENTORY_EXPIRY_WARNING_DAYS:90}

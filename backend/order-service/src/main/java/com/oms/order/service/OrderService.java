@@ -547,12 +547,12 @@ public class OrderService {
     }
 
     @Transactional
-    public void ship(String orderNo, ShipRequest request, Long operatorId, String operatorName) {
-        Order order = findOrder(orderNo);
-        transit(order, OrderStatus.SHIPPED, operatorId, operatorName, "发货");
-        mallCallbackNotifier.notifyOrderStatus(
-                order.getOrderNo(), order.getExternalOrderNo(), OrderStatus.SHIPPED, "order.shipped");
-    }
+  public void ship(String orderNo, ShipRequest request, Long operatorId, String operatorName) {
+    Order order = findOrder(orderNo);
+    transit(order, OrderStatus.SHIPPED, operatorId, operatorName, "发货");
+    mallCallbackNotifier.notifyShipment(
+        order.getOrderNo(), order.getExternalOrderNo(), request.trackingNo(), request.carrier());
+  }
 
     @Transactional
     public void sign(String orderNo, Long operatorId, String operatorName) {

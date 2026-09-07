@@ -5,6 +5,7 @@ import com.oms.common.core.result.ErrorCode;
 import com.oms.payment.dto.PaymentDtos.CallbackRequest;
 import com.oms.payment.dto.PaymentDtos.CreatePaymentRequest;
 import com.oms.payment.dto.PaymentDtos.CreatePaymentResponse;
+import com.oms.payment.dto.PaymentDtos.RefundRequest;
 import com.oms.payment.entity.PaymentTransaction;
 import java.math.BigDecimal;
 import org.springframework.stereotype.Component;
@@ -39,5 +40,10 @@ public class MockPaymentAdapter implements PaymentAdapter {
                 || transaction.getAmount().compareTo(request.amount()) != 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "回调金额与支付单不一致");
         }
+    }
+
+    @Override
+    public String refund(PaymentTransaction transaction, RefundRequest request) {
+        return null;
     }
 }
