@@ -4,6 +4,7 @@ import com.oms.integration.entity.NotificationMessage;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -15,6 +16,9 @@ import org.springframework.web.client.RestTemplate;
  * 通过 {@code oms.integration.notification.*} 配置接入，返回 2xx 视为发送成功。
  */
 @Component
+@ConditionalOnProperty(
+        name = "oms.integration.notification.provider",
+        havingValue = "http")
 public class HttpNotificationProvider implements NotificationProvider {
 
     private final RestTemplate restTemplate = new RestTemplate();
@@ -27,6 +31,11 @@ public class HttpNotificationProvider implements NotificationProvider {
 
     @Value("${oms.integration.notification.api-key:}")
     private String apiKey;
+
+    @Override
+    public boolean supports(String channel) {
+        return true;
+    }
 
     @Override
     public boolean isConfigured() {

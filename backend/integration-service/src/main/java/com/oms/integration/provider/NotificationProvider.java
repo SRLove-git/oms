@@ -8,6 +8,8 @@ import com.oms.integration.entity.NotificationMessage;
  */
 public interface NotificationProvider {
 
+    boolean supports(String channel);
+
     boolean isConfigured();
 
     void send(NotificationMessage message);

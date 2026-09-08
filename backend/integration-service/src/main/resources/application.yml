@@ -6,6 +6,21 @@ spring:
     name: integration-service
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
+  mail:
+    host: smtpdm.aliyun.com
+    port: 465
+    username: no-reply@mail.medical-sg.com
+    password: V86gbdqa8RyJQb
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
   config:
     import:
       - optional:nacos:oms-common.yaml?group=DEFAULT_GROUP&refresh-enabled=true
@@ -59,6 +74,8 @@ logging:
 oms:
   integration:
     notification:
+      provider: ${OMS_INTEGRATION_NOTIFICATION_PROVIDER:smtp}
+      reply-to: ${OMS_INTEGRATION_NOTIFICATION_REPLY_TO:support@medical-sg.com}
       mock-only: ${OMS_INTEGRATION_NOTIFICATION_MOCK_ONLY:true}
       base-url: ${OMS_INTEGRATION_NOTIFICATION_BASE_URL:}
       api-key: ${OMS_INTEGRATION_NOTIFICATION_API_KEY:}

@@ -60,3 +60,7 @@ oms:
   callback:
     base-url: ${OMS_MALL_CALLBACK_URL:http://localhost:8090}
     secret: ${OMS_MALL_CALLBACK_SECRET:demo-mall-callback-secret-change-me}
+    app-id: ${OMS_MALL_CALLBACK_APP_ID:oms}
+    scan-interval-ms: ${OMS_MALL_CALLBACK_SCAN_INTERVAL_MS:5000}
+    max-retries: ${OMS_MALL_CALLBACK_MAX_RETRIES:5}
+    batch-size: ${OMS_MALL_CALLBACK_BATCH_SIZE:100}

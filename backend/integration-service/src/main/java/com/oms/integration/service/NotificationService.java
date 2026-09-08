@@ -32,15 +32,15 @@ public class NotificationService {
 
     private final NotificationTemplateMapper templateMapper;
     private final NotificationMessageMapper messageMapper;
-    private final NotificationProvider provider;
+    private final List<NotificationProvider> providers;
 
     public NotificationService(
             NotificationTemplateMapper templateMapper,
             NotificationMessageMapper messageMapper,
-            NotificationProvider provider) {
+            List<NotificationProvider> providers) {
         this.templateMapper = templateMapper;
         this.messageMapper = messageMapper;
-        this.provider = provider;
+        this.providers = providers;
     }
 
     @Transactional
@@ -103,7 +103,8 @@ public class NotificationService {
         message.setTitle(request.title());
         message.setContent(request.content());
         try {
-            if (provider.isConfigured()) {
+            NotificationProvider provider = findProvider(channel);
+            if (provider != null) {
                 provider.send(message);
             } else if (request.receiver().startsWith("fail:")) {
                 throw new IllegalStateException("模拟渠道发送失败");
@@ -148,7 +149,8 @@ public class NotificationService {
         }
         message.setRetryCount(message.getRetryCount() + 1);
         try {
-            if (provider.isConfigured()) {
+            NotificationProvider provider = findProvider(message.getChannel());
+            if (provider != null) {
                 provider.send(message);
             } else if (message.getReceiver().startsWith("fail:")) {
                 throw new IllegalStateException("模拟渠道再次失败");
@@ -161,6 +163,14 @@ public class NotificationService {
         }
         messageMapper.updateById(message);
         return toMessageResponse(message);
+    }
+
+    private NotificationProvider findProvider(String channel) {
+        return providers.stream()
+                .filter(provider -> provider.supports(channel))
+                .filter(NotificationProvider::isConfigured)
+                .findFirst()
+                .orElse(null);
     }
 
     public List<MessageResponse> recentFailed(int limit) {

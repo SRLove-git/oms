@@ -1,104 +1,79 @@
 package com.oms.order.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
+import com.oms.order.entity.OpenApiEvent;
+import com.oms.order.mapper.OpenApiEventMapper;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
 /**
- * 商城事件回调：订单状态变化后通知 BUZUD 商城。
+ * 商城事件回调入口：只负责把订单状态事件写入 outbox，实际投递由
+ * {@link OpenApiCallbackDispatcher} 异步执行并做退避重试。
  */
 @Service
 public class MallCallbackNotifier {
 
-    private static final Logger log = LoggerFactory.getLogger(MallCallbackNotifier.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    public static final int STATUS_PENDING = 0;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final OpenApiEventMapper eventMapper;
 
-    @Value("${oms.callback.base-url:http://localhost:8090}")
-    private String baseUrl;
+    @Value("${oms.callback.app-id:oms}")
+    private String appId;
 
-    @Value("${oms.callback.secret:demo-mall-callback-secret-change-me}")
-    private String callbackSecret;
+    public MallCallbackNotifier(OpenApiEventMapper eventMapper) {
+        this.eventMapper = eventMapper;
+    }
 
     public void notifyOrderStatus(String orderNo, String externalOrderNo, int status, String eventType) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("eventType", eventType);
-        body.put("orderNo", orderNo);
-        body.put("externalOrderNo", externalOrderNo);
-        body.put("status", status);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("orderNo", orderNo);
+        data.put("externalOrderNo", externalOrderNo);
+        data.put("status", status);
+        enqueue(eventType, orderNo, externalOrderNo, data);
+    }
+
+    public void notifyShipment(
+            String orderNo,
+            String externalOrderNo,
+            String trackingNo,
+            String carrier) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("orderNo", orderNo);
+        data.put("externalOrderNo", externalOrderNo);
+        data.put("status", 4);
+        data.put("carrier", carrier);
+        data.put("trackingNo", trackingNo);
+        data.put("logisticsStatus", "SHIPPED");
+        enqueue("order.shipped", orderNo, externalOrderNo, data);
+    }
+
+    private void enqueue(String eventType, String orderNo, String externalOrderNo, Map<String, Object> data) {
         try {
-            restTemplate.postForEntity(
-                    baseUrl + "/api/v1/callback/oms",
-                    signedRequest(body),
-                    Void.class);
+            String eventId = UUID.randomUUID().toString();
+            Map<String, Object> envelope = new LinkedHashMap<>();
+            envelope.put("eventId", eventId);
+            envelope.put("event", eventType);
+            envelope.put("appId", appId);
+            envelope.put("timestamp", Instant.now().toString());
+            envelope.put("data", data);
+            String payload = MAPPER.writeValueAsString(envelope);
+
+            OpenApiEvent event = new OpenApiEvent();
+            event.setEventId(eventId);
+            event.setEventType(eventType);
+            event.setOrderNo(orderNo);
+            event.setExternalOrderNo(externalOrderNo);
+            event.setPayload(payload);
+            event.setStatus(STATUS_PENDING);
+            event.setRetryCount(0);
+            eventMapper.insert(event);
         } catch (Exception ex) {
-            log.warn(
-                    "商城回调发送失败 eventType={} orderNo={} error={}",
-                    eventType,
-                    orderNo,
-                    ex.getMessage());
+            throw new IllegalStateException("商城回调事件入队失败", ex);
         }
     }
-
-  public void notifyShipment(
-      String orderNo,
-      String externalOrderNo,
-      String trackingNo,
-      String carrier) {
-    Map<String, Object> body = new LinkedHashMap<>();
-    body.put("eventType", "order.shipped");
-    body.put("orderNo", orderNo);
-    body.put("externalOrderNo", externalOrderNo);
-    body.put("status", 4);
-    body.put("carrier", carrier);
-    body.put("trackingNo", trackingNo);
-    body.put("logisticsStatus", "SHIPPED");
-    try {
-      restTemplate.postForEntity(
-          baseUrl + "/api/v1/callback/oms",
-          signedRequest(body),
-          Void.class);
-    } catch (Exception ex) {
-      log.warn(
-          "商城发货回调发送失败 orderNo={} error={}",
-          orderNo,
-          ex.getMessage());
-    }
-  }
-
-  private HttpEntity<String> signedRequest(Map<String, Object> body) {
-    try {
-      String payload = MAPPER.writeValueAsString(body);
-      HttpHeaders headers = new HttpHeaders();
-      headers.setContentType(MediaType.APPLICATION_JSON);
-      headers.set("X-Oms-Signature", hmacSha256(callbackSecret, payload));
-      return new HttpEntity<>(payload, headers);
-    } catch (Exception ex) {
-      throw new IllegalStateException("回调签名失败", ex);
-    }
-  }
-
-  private static String hmacSha256(String secret, String data) throws Exception {
-    Mac mac = Mac.getInstance("HmacSHA256");
-    mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-    byte[] hash = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
-    StringBuilder sb = new StringBuilder(hash.length * 2);
-    for (byte b : hash) {
-      sb.append(String.format("%02x", b));
-    }
-    return sb.toString();
-  }
 }

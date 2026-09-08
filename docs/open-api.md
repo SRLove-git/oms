@@ -198,7 +198,7 @@ X-Sign: ...
 - **支付由商城发起**：OMS 不向商城开放支付发起接口，商城自行收款后经 `payment-notify` 通知（见 4.3），通知幂等、金额强校验。
 - **租户隔离**：查单/取消/支付通知校验订单 `merchant_id` 与 appId 映射的商户一致，不一致返回 403。
 - **审计**：开放 API 产生的订单状态流转，操作人统一记为 `OPEN_API`，全程进入订单日志。
-- **状态只读反馈（当前口径）**：发货、签收、退款等结果由 OMS 内部流程驱动，商城侧通过查单接口（`GET /api/v1/open/orders/{externalOrderNo}`）**轮询获取**；建议轮询间隔 ≥ 5 秒，配合订单状态与 `paidAt`/日志时间线判断增量。**回调订阅为下一迭代规划，协议见第 7 节，双方按该契约预留，未实施前不得依赖回调。**
+- **状态反馈**：发货、签收、退款等结果由 OMS 内部流程驱动，商城侧可同时通过查单接口（`GET /api/v1/open/orders/{externalOrderNo}`）**轮询兜底**（建议间隔 ≥ 5 秒）与 OMS → 商城**主动回调**（见第 7 节）获取；轮询与回调并存，任一路失败都可被另一路兜底。
 
 ## 6. 与第三方平台集成的区别
 
@@ -209,39 +209,46 @@ X-Sign: ...
 
 两类通道互相独立，商城侧接入不依赖第三方电商平台资质。
 
-## 7. 回调订阅（规划，待商城侧就绪后实施）
+## 7. 商城事件回调（OMS → 商城）
 
-> 本节为预留契约：当前**未实现**，商城侧一律按第 5 节轮询。实施时以本节为准，两端同步开发。
+> 已实施：OMS 订单/售后状态变化时主动通知商城，轮询仍保留为兜底。
 
-### 7.1 事件模型
+### 7.1 事件模型（当前已投递）
 
-| 事件 | 触发点 | payload 关键字段 |
+| 事件 | 触发点 | data 关键字段 |
 | :--- | :--- | :--- |
-| `order.paid` | 支付成功回调 / 商城支付成功通知处理完成 | `orderNo`、`externalOrderNo`、`paidAt`、`payAmount` |
-| `order.audited` | 审核通过 | `orderNo`、`externalOrderNo`、`auditedAt` |
-| `order.shipped` | 发货 | `orderNo`、`externalOrderNo`、`trackingNo`、`carrier`、`shippedAt` |
-| `order.signed` | 签收 | `orderNo`、`externalOrderNo`、`signedAt` |
-| `order.completed` | 完成 | `orderNo`、`externalOrderNo`、`completedAt` |
-| `order.cancelled` | 取消/超时取消 | `orderNo`、`externalOrderNo`、`reason`、`cancelledAt` |
-| `order.refunded` | 退款完成（含部分退款） | `orderNo`、`externalOrderNo`、`paymentNo`、`refundAmount` |
-| `aftersale.updated` | 售后状态变更 | `orderNo`、`externalOrderNo`、`returnNo`、`type`、`status` |
+| `order.shipped` | 订单发货 | `orderNo`、`externalOrderNo`、`status`、`carrier`、`trackingNo`、`logisticsStatus` |
+| `order.signed` | 确认签收 | `orderNo`、`externalOrderNo`、`status` |
+| `order.completed` | 完成订单 | `orderNo`、`externalOrderNo`、`status` |
+| `order.after_sales` | 售后介入 | `orderNo`、`externalOrderNo`、`status` |
+| `aftersale.updated` | 售后状态变更 | `orderNo`、`externalOrderNo`、`returnNo`、`omsReturnNo`、`afterSaleStatus` |
 
-### 7.2 推送方式
+> 说明：`order.paid` 由商城收款后主动调用 `payment-notify` 触发，无需 OMS 回推；OMS 超时取消暂以商城轮询兜底。
 
-- **方向**：OMS → 商城。商城在接入申请时提供回调地址，OMS 按 appId 配置 `callback-url` 与 `callback-secret`（网关 `oms.open-api.clients` 扩展字段）。
-- **协议**：`POST {callback-url}`，请求体 `{ event, eventId, appId, timestamp, data }`；OMS 作为调用方按第 2 节同款 HMAC-SHA256 方案签名（请求头 `X-App-Id / X-Timestamp / X-Nonce / X-Sign`），商城验签通过后返回 `{"code":0}` 视为成功。
-- **幂等**：`eventId` 全局唯一，商城侧需按 `eventId` 去重（重复投递场景必须容忍）。
+### 7.2 推送协议
+
+- **方向**：OMS → 商城，回调地址由商城提供（OMS 侧配置 `oms.callback.base-url`）。
+- **报文**：`POST {base-url}/api/v1/callback/oms`，请求体信封：
+  ```json
+  {
+    "eventId": "uuid",
+    "event": "order.shipped",
+    "appId": "oms",
+    "timestamp": "2026-09-08T03:00:00Z",
+    "data": { "orderNo": "...", "externalOrderNo": "...", "status": 4 }
+  }
+  ```
+- **签名**：OMS 按第 2 节同款 HMAC-SHA256 方案签名，请求头 `X-App-Id / X-Timestamp / X-Nonce / X-Sign`；商城验签通过后返回 `{"code":0}` 视为成功。
+- **幂等**：`eventId` 全局唯一，商城按 `eventId` 去重，重复投递返回成功。
 
 ### 7.3 可靠性
 
-- **重试**：失败至少重试 5 次，指数退避（如 1s/5s/30s/5min/30min），全部失败进入死信并告警。
-- **兜底**：回调失败不影响 OMS 内部状态流转；商城侧始终可以查单接口兜底核对（轮询与回调并存）。
-- **顺序**：同一订单的事件按发生顺序投递，商城侧按 `orderNo` 排队处理，避免乱序覆盖。
-- **审计**：每次投递与重试记录日志（含请求签名摘要与响应），可追溯、可对账。
+- **outbox**：状态流转与事件写入同一本地事务，避免状态已变但事件漏发。
+- **重试**：定时任务扫描 `open_api_event`，失败按 1s/5s/30s/5min/30min 指数退避重试，最多重试 5 次，超限置失败（死信）并告警。
+- **兜底**：回调失败不影响 OMS 内部状态流转；商城侧始终可查单接口兜底核对（轮询与回调并存）。
+- **审计**：事件投递与重试记录 `retry_count/last_error/status`，可追溯、可对账。
 
-### 7.4 实施要点（后端预留位）
+### 7.4 工程落地
 
-- 订单状态机各流转点（`OrderService`）发出事件写入回调队列表（outbox，如 `open_api_event`：`event_id/event/app_id/order_no/payload/status/retry_count/next_retry_at`）；其中 `order.paid` 事件由支付成功回调与商城 `payment-notify` 两个入口共同触发。
-- 定时任务扫描待投递事件，签名后 POST 回调地址，成功置终态、失败退避重试。
-- 与订单日志共用流转钩子，保证事件不漏发（订单完成/取消为终态事件，退款事件由 payment-center 联动 after-sales 发出）。
-- 建议表结构与配置项在实施迭代内以 Flyway 迁移落地，不进本次交付。
+- OMS：`order-service` 与 `after-sales-service` 各自维护 `open_api_event` outbox 表（Flyway 迁移），`MallCallbackNotifier` 入队、`OpenApiCallbackDispatcher` 投递。
+- 商城：`POST /api/v1/callback/oms` 验签（时间戳窗口 + nonce 防重放 + HMAC）并按 `eventId` 去重后回写本地订单状态。
