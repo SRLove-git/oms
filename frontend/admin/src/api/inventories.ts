@@ -26,6 +26,11 @@ export interface InventoryTransactionRecord {
   createdAt?: string
 }
 
+export interface InventoryImportResult {
+  totalRows: number
+  successRows: number
+}
+
 export async function pageInventories(params: {
   warehouseId?: number
   skuId?: number
@@ -52,5 +57,26 @@ export async function pageTransactions(params: { skuId?: number; page: number; s
     '/inventory-transactions',
     { params },
   )
+  return res.data.data
+}
+
+export async function downloadInventoryImportTemplate() {
+  const res = await request.get<Blob>('/inventories/import-template', { responseType: 'blob' })
+  const url = URL.createObjectURL(res.data)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = '库存入库导入模板.xlsx'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+export async function importInventory(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await request.post<ApiResult<InventoryImportResult>>('/inventories/import', formData, {
+    timeout: 60_000,
+  })
   return res.data.data
 }

@@ -61,7 +61,7 @@ public class InventoryService {
 
     @Transactional
     public void inbound(InboundRequest request, Long operatorId) {
-        Inventory row = findRow(request.warehouseId(), request.skuId(), request.batchNo());
+        Inventory row = findRow(request.warehouseId(), request.skuId(), request.batchNo(), request.expireAt());
         int before = row.getQuantity();
         int affected = inventoryMapper.update(
                 null,
@@ -316,7 +316,7 @@ public class InventoryService {
                         .toList());
     }
 
-    private Inventory findRow(Long warehouseId, Long skuId, String batchNo) {
+    private Inventory findRow(Long warehouseId, Long skuId, String batchNo, LocalDate expireAt) {
         String batch = batchNo == null ? "" : batchNo;
         Inventory row = inventoryMapper.selectOne(new LambdaQueryWrapper<Inventory>()
                 .eq(Inventory::getWarehouseId, warehouseId)
@@ -331,7 +331,7 @@ public class InventoryService {
             row.setQuantity(0);
             row.setReservedQuantity(0);
             row.setFrozenQuantity(0);
-            row.setExpireAt(LocalDate.now().plusYears(3));
+            row.setExpireAt(expireAt == null ? LocalDate.now().plusYears(3) : expireAt);
             inventoryMapper.insert(row);
         }
         return row;

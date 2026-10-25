@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
+import type { FileItem } from '@arco-design/web-vue'
 
-import { inbound, pageInventories, pageTransactions } from '@/api/inventories'
+import {
+  downloadInventoryImportTemplate,
+  importInventory,
+  inbound,
+  pageInventories,
+  pageTransactions,
+} from '@/api/inventories'
 import type { InventoryRecord, InventoryTransactionRecord } from '@/api/inventories'
 import { createWarehouse, listWarehouses } from '@/api/warehouses'
 import type { WarehouseRecord } from '@/api/warehouses'
@@ -31,6 +38,9 @@ const warehouseFilter = ref<number | undefined>(undefined)
 const inboundVisible = ref(false)
 const warehouseVisible = ref(false)
 const txVisible = ref(false)
+const importVisible = ref(false)
+const importing = ref(false)
+const importFiles = ref<FileItem[]>([])
 const txList = ref<InventoryTransactionRecord[]>([])
 const inboundForm = reactive({
   warehouseId: undefined as number | undefined,
@@ -82,6 +92,36 @@ async function submitWarehouse() {
   loadWarehouses()
 }
 
+async function downloadTemplate() {
+  await downloadInventoryImportTemplate()
+  Message.success('模板已下载')
+}
+
+async function submitImport() {
+  const file = importFiles.value[0]?.file
+  if (!file) {
+    Message.warning('请先选择填写好的 .xlsx 模板')
+    return false
+  }
+  importing.value = true
+  try {
+    const result = await importInventory(file)
+    Message.success(`导入完成，共成功入库 ${result.successRows} 行`)
+    importFiles.value = []
+    await load()
+    return true
+  } catch {
+    return false
+  } finally {
+    importing.value = false
+  }
+}
+
+function openImport() {
+  importFiles.value = []
+  importVisible.value = true
+}
+
 async function showTransactions(skuId: number) {
   const res = await pageTransactions({ skuId, page: 1, size: 20 })
   txList.value = res.records
@@ -111,6 +151,7 @@ onMounted(() => {
       />
       <a-button type="primary" @click="load">查询</a-button>
       <a-button type="outline" @click="inboundVisible = true">入库</a-button>
+      <a-button type="outline" @click="openImport">批量导入</a-button>
       <a-button type="outline" @click="warehouseVisible = true">新建仓库</a-button>
     </a-space>
 
@@ -178,6 +219,29 @@ onMounted(() => {
       </a-form>
     </a-modal>
 
+    <a-modal
+      v-model:visible="importVisible"
+      title="批量导入库存"
+      :ok-loading="importing"
+      :mask-closable="!importing"
+      :on-before-ok="submitImport"
+    >
+      <a-alert type="info" class="import-tip">
+        先下载模板，按仓库编码和 SKU 编码填写。系统会在入库前校验整张表，任一行错误都不会写入库存。
+      </a-alert>
+      <a-space direction="vertical" fill>
+        <a-button type="text" @click="downloadTemplate">下载库存入库模板</a-button>
+        <a-upload
+          v-model:file-list="importFiles"
+          draggable
+          :auto-upload="false"
+          :limit="1"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          tip="仅支持 .xlsx，最多 1,000 行，文件不超过 5 MB"
+        />
+      </a-space>
+    </a-modal>
+
     <a-drawer v-model:visible="txVisible" title="库存流水" :width="720" :footer="false">
       <a-table row-key="id" :data="txList" :pagination="false" :scroll="{ x: 700 }">
         <template #columns>
@@ -204,5 +268,9 @@ onMounted(() => {
 .pagination {
   margin-top: 16px;
   justify-content: flex-end;
+}
+
+.import-tip {
+  margin-bottom: 16px;
 }
 </style>

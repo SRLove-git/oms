@@ -13,6 +13,9 @@ public final class InventoryDtos {
             Long warehouseId, Long skuId, int quantity, String batchNo, LocalDate expireAt, String remark) {
     }
 
+    public record ImportResult(int totalRows, int successRows) {
+    }
+
     public record ReserveRequest(String orderNo, List<ReserveItem> items) {
     }
 
