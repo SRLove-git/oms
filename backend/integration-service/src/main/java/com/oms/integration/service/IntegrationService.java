@@ -13,6 +13,7 @@ import com.oms.integration.dto.IntegrationDtos.SyncStockRequest;
 import com.oms.integration.entity.ExternalOrderMapping;
 import com.oms.integration.mapper.ExternalOrderMappingMapper;
 import com.oms.integration.provider.PlatformProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +29,8 @@ public class IntegrationService {
     private final PlatformProvider platformProvider;
 
     public IntegrationService(
-            ExternalOrderMappingMapper mappingMapper, PlatformProvider platformProvider) {
+            ExternalOrderMappingMapper mappingMapper,
+            @Qualifier("httpPlatformProvider") PlatformProvider platformProvider) {
         this.mappingMapper = mappingMapper;
         this.platformProvider = platformProvider;
     }

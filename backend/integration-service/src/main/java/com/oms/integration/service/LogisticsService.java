@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +28,8 @@ public class LogisticsService {
     private final LogisticsProvider logisticsProvider;
 
     public LogisticsService(
-            LogisticsTrackingMapper trackingMapper, LogisticsProvider logisticsProvider) {
+            LogisticsTrackingMapper trackingMapper,
+            @Qualifier("httpLogisticsProvider") LogisticsProvider logisticsProvider) {
         this.trackingMapper = trackingMapper;
         this.logisticsProvider = logisticsProvider;
     }

@@ -20,13 +20,11 @@ public class OrderApprovalService {
 
     private final OrderApprovalMapper approvalMapper;
     private final OrderMapper orderMapper;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public OrderApprovalService(
-            OrderApprovalMapper approvalMapper, OrderMapper orderMapper, ObjectMapper objectMapper) {
+    public OrderApprovalService(OrderApprovalMapper approvalMapper, OrderMapper orderMapper) {
         this.approvalMapper = approvalMapper;
         this.orderMapper = orderMapper;
-        this.objectMapper = objectMapper;
     }
 
     @Transactional
