@@ -619,6 +619,20 @@ class OrderServiceBusinessTest {
     }
 
     @Test
+    void notifyPaymentSuccessShouldRejectAmountMismatchAfterPaid() {
+        Order order = order(OrderStatus.PAID);
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
+
+        assertThatThrownBy(() -> orderService.notifyPaymentSuccess(
+                        "M1", new OpenPaymentNotifyRequest("MP002", new BigDecimal("0.01"), null, null, null), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("金额");
+
+        verify(orderMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(inventoryClient, never()).deduct(any());
+    }
+
+    @Test
     void notifyPaymentSuccessShouldRejectCancelledOrder() {
         Order order = order(OrderStatus.CANCELLED);
         when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);

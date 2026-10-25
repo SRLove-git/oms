@@ -255,14 +255,14 @@ public class OrderService {
         if (status == OrderStatus.CANCELLED) {
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), "订单已取消，不能支付");
         }
-        if (status != OrderStatus.PENDING_PAYMENT) {
-            // 已支付及之后状态：重复通知幂等返回当前订单
-            return toOpenResponse(order, loadItems(order.getId()));
-        }
         if (request.amount() == null || request.amount().compareTo(order.getPayAmount()) != 0) {
             log.error("商城支付通知金额不一致，拒绝 orderNo={} expect={} actual={}",
                     order.getOrderNo(), order.getPayAmount(), request.amount());
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), "支付金额与订单应付金额不一致");
+        }
+        if (status != OrderStatus.PENDING_PAYMENT) {
+            // 已支付及之后状态：金额一致的重复通知幂等返回当前订单
+            return toOpenResponse(order, loadItems(order.getId()));
         }
 
         LocalDateTime paidAt = request.paidAt() == null ? LocalDateTime.now() : request.paidAt();

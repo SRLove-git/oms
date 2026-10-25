@@ -9,7 +9,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
-@FeignClient(name = "inventory-service", path = "/api/v1")
+@FeignClient(
+        name = "inventory-service",
+        url = "${oms.clients.inventory-url:}",
+        path = "/api/v1")
 public interface InventoryClient {
 
     @GetMapping("/skus/{id}")

@@ -19,11 +19,13 @@ sha256_hex() { printf '%s' "$1" | openssl dgst -sha256 -hex | awk '{print $2}'; 
 # 开放 API 调用：按 docs/open-api.md 签名方案逐请求现算签名
 open_api() { # method path body -> 原始响应
   local method=$1 path=$2 body=${3:-}
-  local ts nonce sign
+  local ts nonce sign sign_path
   ts=$(date +%s)
   nonce=$(openssl rand -hex 8)
+  # 网关只使用原始请求路径参与签名，查询参数不属于签名路径。
+  sign_path="${path%%\?*}"
   sign=$(printf '%s\n%s\n%s\n%s\n%s' \
-    "$method" "$path" "$ts" "$nonce" "$(sha256_hex "$body")" \
+    "$method" "$sign_path" "$ts" "$nonce" "$(sha256_hex "$body")" \
     | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $2}')
   local args=(
     -s -X "$method" "$GATEWAY$path" -H 'Content-Type: application/json'
@@ -101,7 +103,7 @@ if [[ -n "$SKU_ID" ]]; then
   fi
 
   if printf '%s' "$FIRST" | json_val data.consignee | grep -q '冒烟收货人' \
-     && printf '%s' "$FIRST" | json_val data.deliveryFee | grep -q '9.90'; then
+     && printf '%s' "$FIRST" | json_val data.deliveryFee | grep -Eq '^9\.9(0*)$'; then
     pass '下单响应含收货信息与配送费'
   else
     fail "下单响应缺少收货信息/配送费: $FIRST"
