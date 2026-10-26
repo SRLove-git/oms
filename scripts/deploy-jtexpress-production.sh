@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RELEASE_DIR="${1:?release directory is required}"
+SECRETS_FILE="${2:?secrets file is required}"
+OMS_ROOT="/opt/oms"
+COMPOSE_FILE="$OMS_ROOT/deploy/docker-compose.prod.yml"
+ENV_FILE="$OMS_ROOT/.env"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+BACKUP_DIR="$OMS_ROOT/backups/jtexpress-$STAMP"
+DEPLOYED=0
+
+case "$RELEASE_DIR" in
+  "$OMS_ROOT"/releases/*) ;;
+  *) echo "release directory must be under $OMS_ROOT/releases" >&2; exit 2 ;;
+esac
+
+for file in oms-gateway.jar order-service.jar integration-service.jar admin.tgz docker-compose.prod.yml; do
+  test -s "$RELEASE_DIR/$file"
+done
+test -s "$SECRETS_FILE"
+
+mkdir -p "$BACKUP_DIR/jars" "$BACKUP_DIR/deploy" "$BACKUP_DIR/dist"
+cp -a "$OMS_ROOT/jars/oms-gateway.jar" "$BACKUP_DIR/jars/"
+cp -a "$OMS_ROOT/jars/order-service.jar" "$BACKUP_DIR/jars/"
+cp -a "$OMS_ROOT/jars/integration-service.jar" "$BACKUP_DIR/jars/"
+cp -a "$COMPOSE_FILE" "$BACKUP_DIR/deploy/"
+cp -a "$ENV_FILE" "$BACKUP_DIR/env"
+cp -a "$OMS_ROOT/dist/admin" "$BACKUP_DIR/dist/admin"
+chmod 600 "$BACKUP_DIR/env"
+DEPLOYED=1
+
+rollback() {
+  if [[ "$DEPLOYED" != "1" ]]; then
+    return
+  fi
+  echo "Deployment failed; restoring $BACKUP_DIR" >&2
+  cp -a "$BACKUP_DIR/jars/." "$OMS_ROOT/jars/"
+  cp -a "$BACKUP_DIR/deploy/docker-compose.prod.yml" "$COMPOSE_FILE"
+  cp -a "$BACKUP_DIR/env" "$ENV_FILE"
+  rm -rf "$OMS_ROOT/dist/admin"
+  cp -a "$BACKUP_DIR/dist/admin" "$OMS_ROOT/dist/admin"
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-deps --force-recreate \
+    oms-gateway order-service integration-service admin-web || true
+}
+trap rollback ERR
+
+install -m 0644 "$RELEASE_DIR/oms-gateway.jar" "$OMS_ROOT/jars/oms-gateway.jar"
+install -m 0644 "$RELEASE_DIR/order-service.jar" "$OMS_ROOT/jars/order-service.jar"
+install -m 0644 "$RELEASE_DIR/integration-service.jar" "$OMS_ROOT/jars/integration-service.jar"
+install -m 0644 "$RELEASE_DIR/docker-compose.prod.yml" "$COMPOSE_FILE"
+
+NEXT_ENV="$ENV_FILE.next"
+cp "$ENV_FILE" "$NEXT_ENV"
+while IFS='=' read -r key value; do
+  [[ -n "$key" ]] || continue
+  case "$key" in
+    OMS_JTEXPRESS_*|OMS_INTERNAL_SERVICE_SECRET) ;;
+    *) echo "unexpected secret key: $key" >&2; exit 3 ;;
+  esac
+  TEMP_ENV="$NEXT_ENV.tmp"
+  grep -v "^${key}=" "$NEXT_ENV" > "$TEMP_ENV" || true
+  printf '%s=%s\n' "$key" "$value" >> "$TEMP_ENV"
+  mv "$TEMP_ENV" "$NEXT_ENV"
+done < "$SECRETS_FILE"
+chmod 600 "$NEXT_ENV"
+mv "$NEXT_ENV" "$ENV_FILE"
+
+NEW_ADMIN="$OMS_ROOT/dist/admin.new-$STAMP"
+mkdir -p "$NEW_ADMIN"
+tar -xzf "$RELEASE_DIR/admin.tgz" -C "$NEW_ADMIN"
+rm -rf "$OMS_ROOT/dist/admin"
+mv "$NEW_ADMIN" "$OMS_ROOT/dist/admin"
+
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >/dev/null
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-deps --force-recreate \
+  oms-gateway order-service integration-service admin-web
+
+wait_healthy() {
+  local container="$1"
+  local status
+  for _ in $(seq 1 36); do
+    status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container")"
+    if [[ "$status" == "healthy" || "$status" == "running" ]]; then
+      return 0
+    fi
+    if [[ "$status" == "unhealthy" || "$status" == "exited" || "$status" == "dead" ]]; then
+      echo "$container entered state $status" >&2
+      return 1
+    fi
+    sleep 5
+  done
+  echo "$container did not become healthy in time" >&2
+  return 1
+}
+
+wait_healthy oms-gateway
+wait_healthy oms-order-service
+wait_healthy oms-integration-service
+wait_healthy oms-admin-web
+
+VERIFY_RESULT="$(docker exec oms-integration-service wget -qO- \
+  'http://127.0.0.1:8086/api/v1/logistics/jtexpress/verify?serviceCode=PUDO')"
+printf '%s\n' "$VERIFY_RESULT"
+grep -q '"connected":true' <<< "$VERIFY_RESULT"
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps \
+  oms-gateway order-service integration-service admin-web
+
+rm -f "$SECRETS_FILE"
+trap - ERR
+echo "Deployment completed. Backup: $BACKUP_DIR"

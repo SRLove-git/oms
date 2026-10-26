@@ -1,0 +1,113 @@
+name: Deploy OMS production
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oms-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build backend artifacts
+        working-directory: backend
+        run: mvn -B -ntp -pl oms-gateway,order-service,integration-service -am package -DskipTests
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Build admin frontend
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @oms/admin build
+
+      - name: Prepare release
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp backend/oms-gateway/target/oms-gateway-0.1.0-SNAPSHOT.jar release/oms-gateway.jar
+          cp backend/order-service/target/order-service-0.1.0-SNAPSHOT.jar release/order-service.jar
+          cp backend/integration-service/target/integration-service-0.1.0-SNAPSHOT.jar release/integration-service.jar
+          cp deploy/docker-compose.prod.yml release/docker-compose.prod.yml
+          cp scripts/deploy-jtexpress-production.sh release/deploy.sh
+          tar -C frontend/admin/dist -czf release/admin.tgz .
+          chmod 700 release/deploy.sh
+
+      - name: Install SSH client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Upload and deploy
+        env:
+          SSHPASS: ${{ secrets.OMS_DEPLOY_PASSWORD }}
+          DEPLOY_HOST: ${{ secrets.OMS_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.OMS_DEPLOY_USER }}
+          JT_EMAIL: ${{ secrets.OMS_JTEXPRESS_EMAIL }}
+          JT_PASSWORD: ${{ secrets.OMS_JTEXPRESS_PASSWORD }}
+          JT_WEBHOOK_SECRET: ${{ secrets.OMS_JTEXPRESS_WEBHOOK_SECRET }}
+          INTERNAL_SECRET: ${{ secrets.OMS_INTERNAL_SERVICE_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$SSHPASS"
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$JT_EMAIL"
+          test -n "$JT_PASSWORD"
+          test -n "$JT_WEBHOOK_SECRET"
+          test -n "$INTERNAL_SECRET"
+          RELEASE_DIR="/opt/oms/releases/${GITHUB_SHA}"
+          SSH=(sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
+          SCP=(sshpass -e scp -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
+          "${SSH[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$RELEASE_DIR'"
+          "${SCP[@]}" release/* "$DEPLOY_USER@$DEPLOY_HOST:$RELEASE_DIR/"
+          {
+            printf 'OMS_JTEXPRESS_ENABLED=true\n'
+            printf 'OMS_JTEXPRESS_BASE_URL=https://edishops.jtexpress.sg/jts-service-doorstep\n'
+            printf 'OMS_JTEXPRESS_EMAIL=%s\n' "$JT_EMAIL"
+            printf 'OMS_JTEXPRESS_PASSWORD=%s\n' "$JT_PASSWORD"
+            printf 'OMS_JTEXPRESS_MERCHANT_CODE=\n'
+            printf 'OMS_JTEXPRESS_SERVICE_CODE=DOM123\n'
+            printf 'OMS_JTEXPRESS_WEBHOOK_SECRET=%s\n' "$JT_WEBHOOK_SECRET"
+            printf 'OMS_INTERNAL_SERVICE_SECRET=%s\n' "$INTERNAL_SECRET"
+          } > jt.env
+          chmod 600 jt.env
+          "${SCP[@]}" jt.env "$DEPLOY_USER@$DEPLOY_HOST:$RELEASE_DIR/jt.env"
+          "${SSH[@]}" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "chmod 700 '$RELEASE_DIR/deploy.sh' && '$RELEASE_DIR/deploy.sh' '$RELEASE_DIR' '$RELEASE_DIR/jt.env'"
+
+      - name: Verify public HTTPS
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 \
+            https://oms.medical-sg.com/ >/dev/null
+          STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -X POST https://oms.medical-sg.com/api/v1/logistics/jtexpress/webhook \
+            -H 'Content-Type: application/json' \
+            -H 'X-SimplyPost-Id: deployment-smoke' \
+            -H 'X-SimplyPost-Signature: invalid' \
+            --data '{}')"
+          test "$STATUS" = "401"
