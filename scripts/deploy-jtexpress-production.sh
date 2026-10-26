@@ -9,6 +9,15 @@ ENV_FILE="$OMS_ROOT/.env"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP_DIR="$OMS_ROOT/backups/jtexpress-$STAMP"
 DEPLOYED=0
+ENV_EXISTED=0
+
+compose() {
+  if [[ -f "$ENV_FILE" ]]; then
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+  else
+    docker compose -f "$COMPOSE_FILE" "$@"
+  fi
+}
 
 case "$RELEASE_DIR" in
   "$OMS_ROOT"/releases/*) ;;
@@ -25,9 +34,16 @@ cp -a "$OMS_ROOT/jars/oms-gateway.jar" "$BACKUP_DIR/jars/"
 cp -a "$OMS_ROOT/jars/order-service.jar" "$BACKUP_DIR/jars/"
 cp -a "$OMS_ROOT/jars/integration-service.jar" "$BACKUP_DIR/jars/"
 cp -a "$COMPOSE_FILE" "$BACKUP_DIR/deploy/"
-cp -a "$ENV_FILE" "$BACKUP_DIR/env"
+if [[ -f "$ENV_FILE" ]]; then
+  cp -a "$ENV_FILE" "$BACKUP_DIR/env"
+  ENV_EXISTED=1
+else
+  : > "$BACKUP_DIR/env.absent"
+fi
 cp -a "$OMS_ROOT/dist/admin" "$BACKUP_DIR/dist/admin"
-chmod 600 "$BACKUP_DIR/env"
+if [[ "$ENV_EXISTED" == "1" ]]; then
+  chmod 600 "$BACKUP_DIR/env"
+fi
 DEPLOYED=1
 
 rollback() {
@@ -37,10 +53,14 @@ rollback() {
   echo "Deployment failed; restoring $BACKUP_DIR" >&2
   cp -a "$BACKUP_DIR/jars/." "$OMS_ROOT/jars/"
   cp -a "$BACKUP_DIR/deploy/docker-compose.prod.yml" "$COMPOSE_FILE"
-  cp -a "$BACKUP_DIR/env" "$ENV_FILE"
+  if [[ "$ENV_EXISTED" == "1" ]]; then
+    cp -a "$BACKUP_DIR/env" "$ENV_FILE"
+  else
+    rm -f "$ENV_FILE"
+  fi
   rm -rf "$OMS_ROOT/dist/admin"
   cp -a "$BACKUP_DIR/dist/admin" "$OMS_ROOT/dist/admin"
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-deps --force-recreate \
+  compose up -d --no-deps --force-recreate \
     oms-gateway order-service integration-service admin-web || true
 }
 trap rollback ERR
@@ -51,7 +71,11 @@ install -m 0644 "$RELEASE_DIR/integration-service.jar" "$OMS_ROOT/jars/integrati
 install -m 0644 "$RELEASE_DIR/docker-compose.prod.yml" "$COMPOSE_FILE"
 
 NEXT_ENV="$ENV_FILE.next"
-cp "$ENV_FILE" "$NEXT_ENV"
+if [[ -f "$ENV_FILE" ]]; then
+  cp "$ENV_FILE" "$NEXT_ENV"
+else
+  : > "$NEXT_ENV"
+fi
 while IFS='=' read -r key value; do
   [[ -n "$key" ]] || continue
   case "$key" in
@@ -72,8 +96,8 @@ tar -xzf "$RELEASE_DIR/admin.tgz" -C "$NEW_ADMIN"
 rm -rf "$OMS_ROOT/dist/admin"
 mv "$NEW_ADMIN" "$OMS_ROOT/dist/admin"
 
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >/dev/null
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-deps --force-recreate \
+compose config >/dev/null
+compose up -d --no-deps --force-recreate \
   oms-gateway order-service integration-service admin-web
 
 wait_healthy() {
@@ -103,7 +127,7 @@ VERIFY_RESULT="$(docker exec oms-integration-service wget -qO- \
   'http://127.0.0.1:8086/api/v1/logistics/jtexpress/verify?serviceCode=PUDO')"
 printf '%s\n' "$VERIFY_RESULT"
 grep -q '"connected":true' <<< "$VERIFY_RESULT"
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps \
+compose ps \
   oms-gateway order-service integration-service admin-web
 
 rm -f "$SECRETS_FILE"
