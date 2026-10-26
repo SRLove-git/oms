@@ -9,13 +9,54 @@ ENV_FILE="$OMS_ROOT/.env"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP_DIR="$OMS_ROOT/backups/jtexpress-$STAMP"
 DEPLOYED=0
-ENV_EXISTED=0
+BUSINESS_SERVICES=(
+  oms-gateway
+  user-service
+  order-service
+  inventory-service
+  after-sales-service
+  payment-center
+  integration-service
+  admin-web
+)
+BUSINESS_CONTAINERS=(
+  oms-gateway
+  oms-user-service
+  oms-order-service
+  oms-inventory-service
+  oms-after-sales-service
+  oms-payment-center
+  oms-integration-service
+  oms-admin-web
+)
 
 compose() {
   if [[ -f "$ENV_FILE" ]]; then
     docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
   else
     docker compose -f "$COMPOSE_FILE" "$@"
+  fi
+}
+
+container_env_value() {
+  local container="$1"
+  local key="$2"
+  docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container" \
+    | sed -n "s/^${key}=//p" \
+    | head -n 1
+}
+
+seed_missing_env() {
+  local file="$1"
+  local key="$2"
+  local container="$3"
+  local value
+  if grep -q "^${key}=" "$file"; then
+    return
+  fi
+  value="$(container_env_value "$container" "$key")"
+  if [[ -n "$value" ]]; then
+    printf '%s=%s\n' "$key" "$value" >> "$file"
   fi
 }
 
@@ -36,14 +77,15 @@ cp -a "$OMS_ROOT/jars/integration-service.jar" "$BACKUP_DIR/jars/"
 cp -a "$COMPOSE_FILE" "$BACKUP_DIR/deploy/"
 if [[ -f "$ENV_FILE" ]]; then
   cp -a "$ENV_FILE" "$BACKUP_DIR/env"
-  ENV_EXISTED=1
 else
-  : > "$BACKUP_DIR/env.absent"
+  : > "$BACKUP_DIR/env"
 fi
+seed_missing_env "$BACKUP_DIR/env" OMS_JWT_SECRET oms-user-service
+seed_missing_env "$BACKUP_DIR/env" MYSQL_PASSWORD oms-user-service
+seed_missing_env "$BACKUP_DIR/env" MYSQL_ROOT_PASSWORD oms-mysql
+seed_missing_env "$BACKUP_DIR/env" OMS_OPEN_API_DEMO_MALL_SECRET oms-gateway
 cp -a "$OMS_ROOT/dist/admin" "$BACKUP_DIR/dist/admin"
-if [[ "$ENV_EXISTED" == "1" ]]; then
-  chmod 600 "$BACKUP_DIR/env"
-fi
+chmod 600 "$BACKUP_DIR/env"
 DEPLOYED=1
 
 rollback() {
@@ -53,15 +95,10 @@ rollback() {
   echo "Deployment failed; restoring $BACKUP_DIR" >&2
   cp -a "$BACKUP_DIR/jars/." "$OMS_ROOT/jars/"
   cp -a "$BACKUP_DIR/deploy/docker-compose.prod.yml" "$COMPOSE_FILE"
-  if [[ "$ENV_EXISTED" == "1" ]]; then
-    cp -a "$BACKUP_DIR/env" "$ENV_FILE"
-  else
-    rm -f "$ENV_FILE"
-  fi
+  cp -a "$BACKUP_DIR/env" "$ENV_FILE"
   rm -rf "$OMS_ROOT/dist/admin"
   cp -a "$BACKUP_DIR/dist/admin" "$OMS_ROOT/dist/admin"
-  compose up -d --no-deps --force-recreate \
-    oms-gateway order-service integration-service admin-web || true
+  compose up -d --no-deps --force-recreate "${BUSINESS_SERVICES[@]}" || true
 }
 trap rollback ERR
 
@@ -71,11 +108,7 @@ install -m 0644 "$RELEASE_DIR/integration-service.jar" "$OMS_ROOT/jars/integrati
 install -m 0644 "$RELEASE_DIR/docker-compose.prod.yml" "$COMPOSE_FILE"
 
 NEXT_ENV="$ENV_FILE.next"
-if [[ -f "$ENV_FILE" ]]; then
-  cp "$ENV_FILE" "$NEXT_ENV"
-else
-  : > "$NEXT_ENV"
-fi
+cp "$BACKUP_DIR/env" "$NEXT_ENV"
 while IFS='=' read -r key value; do
   [[ -n "$key" ]] || continue
   case "$key" in
@@ -97,8 +130,7 @@ rm -rf "$OMS_ROOT/dist/admin"
 mv "$NEW_ADMIN" "$OMS_ROOT/dist/admin"
 
 compose config >/dev/null
-compose up -d --no-deps --force-recreate \
-  oms-gateway order-service integration-service admin-web
+compose up -d --no-deps --force-recreate "${BUSINESS_SERVICES[@]}"
 
 wait_healthy() {
   local container="$1"
@@ -119,16 +151,28 @@ wait_healthy() {
 }
 
 wait_healthy oms-gateway
+wait_healthy oms-user-service
 wait_healthy oms-order-service
+wait_healthy oms-inventory-service
+wait_healthy oms-after-sales-service
+wait_healthy oms-payment-center
 wait_healthy oms-integration-service
 wait_healthy oms-admin-web
+
+EXPECTED_JWT_SECRET="$(sed -n 's/^OMS_JWT_SECRET=//p' "$ENV_FILE" | head -n 1)"
+EXPECTED_INTERNAL_SECRET="$(sed -n 's/^OMS_INTERNAL_SERVICE_SECRET=//p' "$ENV_FILE" | head -n 1)"
+test -n "$EXPECTED_JWT_SECRET"
+test -n "$EXPECTED_INTERNAL_SECRET"
+for container in "${BUSINESS_CONTAINERS[@]:0:7}"; do
+  test "$(container_env_value "$container" OMS_JWT_SECRET)" = "$EXPECTED_JWT_SECRET"
+  test "$(container_env_value "$container" OMS_INTERNAL_SERVICE_SECRET)" = "$EXPECTED_INTERNAL_SECRET"
+done
 
 VERIFY_RESULT="$(docker exec oms-integration-service wget -qO- \
   'http://127.0.0.1:8086/api/v1/logistics/jtexpress/verify?serviceCode=PUDO')"
 printf '%s\n' "$VERIFY_RESULT"
 grep -q '"connected":true' <<< "$VERIFY_RESULT"
-compose ps \
-  oms-gateway order-service integration-service admin-web
+compose ps "${BUSINESS_SERVICES[@]}"
 
 rm -f "$SECRETS_FILE"
 trap - ERR
