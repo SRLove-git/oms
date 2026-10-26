@@ -78,6 +78,9 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     }
 
   private boolean isWhitelisted(String path) {
+    if (path.equals("/api/v1/logistics/jtexpress/webhook")) {
+      return true;
+    }
     if (WHITELIST.stream().anyMatch(path::startsWith)) {
       return true;
     }

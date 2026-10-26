@@ -43,6 +43,9 @@ public final class OrderDtos {
             BigDecimal payAmount,
             String currency,
             String remark,
+            String consignee,
+            String phone,
+            String address,
             LocalDateTime paidAt,
             LocalDateTime timeoutAt,
             LocalDateTime createdAt,
@@ -73,6 +76,14 @@ public final class OrderDtos {
     }
 
     public record ShipRequest(String trackingNo, String carrier) {
+    }
+
+    public record LogisticsEventRequest(
+            String orderNo,
+            String carrier,
+            String trackingNo,
+            String logisticsStatus,
+            String trace) {
     }
 
     public record PaymentSuccessRequest(

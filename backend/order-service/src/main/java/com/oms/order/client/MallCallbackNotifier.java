@@ -52,6 +52,25 @@ public class MallCallbackNotifier {
         enqueue("order.shipped", orderNo, externalOrderNo, data);
     }
 
+    public void notifyLogistics(
+            String orderNo,
+            String externalOrderNo,
+            int status,
+            String carrier,
+            String trackingNo,
+            String logisticsStatus,
+            String trace) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("orderNo", orderNo);
+        data.put("externalOrderNo", externalOrderNo);
+        data.put("status", status);
+        data.put("carrier", carrier);
+        data.put("trackingNo", trackingNo);
+        data.put("logisticsStatus", logisticsStatus);
+        data.put("trace", trace);
+        enqueue("logistics.updated", orderNo, externalOrderNo, data);
+    }
+
     private void enqueue(String eventType, String orderNo, String externalOrderNo, Map<String, Object> data) {
         try {
             String eventId = UUID.randomUUID().toString();

@@ -7,6 +7,7 @@ x-backend-env: &backend-env
   NACOS_USERNAME: ""
   NACOS_PASSWORD: ""
   OMS_JWT_SECRET: ${OMS_JWT_SECRET:-change-this-oms-jwt-secret-please-0123456789}
+  OMS_INTERNAL_SERVICE_SECRET: ${OMS_INTERNAL_SERVICE_SECRET:-change-this-internal-service-secret}
   MYSQL_HOST: mysql
   MYSQL_PORT: 3306
   MYSQL_USERNAME: oms
@@ -317,6 +318,13 @@ services:
       <<: *backend-env
       SERVER_PORT: "8086"
       ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
+      OMS_JTEXPRESS_ENABLED: ${OMS_JTEXPRESS_ENABLED:-false}
+      OMS_JTEXPRESS_BASE_URL: ${OMS_JTEXPRESS_BASE_URL:-https://demoedishops.jtexpress.sg/jts-service-doorstep}
+      OMS_JTEXPRESS_EMAIL: ${OMS_JTEXPRESS_EMAIL:-}
+      OMS_JTEXPRESS_PASSWORD: ${OMS_JTEXPRESS_PASSWORD:-}
+      OMS_JTEXPRESS_MERCHANT_CODE: ${OMS_JTEXPRESS_MERCHANT_CODE:-}
+      OMS_JTEXPRESS_SERVICE_CODE: ${OMS_JTEXPRESS_SERVICE_CODE:-DOM123}
+      OMS_JTEXPRESS_WEBHOOK_SECRET: ${OMS_JTEXPRESS_WEBHOOK_SECRET:-}
     command: ["java", "-jar", "/app/app.jar"]
     volumes:
       - /opt/oms/jars/integration-service.jar:/app/app.jar:ro

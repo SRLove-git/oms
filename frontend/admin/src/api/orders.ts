@@ -33,6 +33,9 @@ export interface OrderLogRecord {
 export interface OrderDetail extends OrderSummary {
   currency: string
   remark?: string
+  consignee?: string
+  phone?: string
+  address?: string
   paidAt?: string
   timeoutAt?: string
   items: OrderItemRecord[]
@@ -55,8 +58,42 @@ export async function auditOrder(orderNo: string) {
 }
 
 export async function shipOrder(orderNo: string, trackingNo: string, carrier: string) {
-  const res = await request.post<ApiResult<void>>(`/orders/${orderNo}/ship`, { trackingNo, carrier })
+  const res = await request.post<ApiResult<void>>(`/orders/${orderNo}/ship`, {
+    trackingNo,
+    carrier,
+  })
   return res.data
+}
+
+export interface JtShipmentInput {
+  reference_number: string
+  service_code?: string
+  consignee_details: {
+    contact_name: string
+    phone_number: string
+    address: string
+    postcode: string
+  }
+  item_details: Array<{
+    weight: number
+    weight_unit: 'G' | 'KG'
+    description?: string
+    quantity?: number
+  }>
+}
+
+export interface JtShipmentResult {
+  tracking_id: string
+  reference_number: string
+  sorting_code?: string
+}
+
+export async function createJtShipment(input: JtShipmentInput) {
+  const res = await request.post<ApiResult<JtShipmentResult>>(
+    '/logistics/jtexpress/shipments',
+    input,
+  )
+  return res.data.data
 }
 
 export async function signOrder(orderNo: string) {

@@ -29,7 +29,7 @@ public class LogisticsService {
 
     public LogisticsService(
             LogisticsTrackingMapper trackingMapper,
-            @Qualifier("httpLogisticsProvider") LogisticsProvider logisticsProvider) {
+            @Qualifier("routingLogisticsProvider") LogisticsProvider logisticsProvider) {
         this.trackingMapper = trackingMapper;
         this.logisticsProvider = logisticsProvider;
     }
@@ -130,7 +130,9 @@ public class LogisticsService {
         } catch (Exception ex) {
             log.warn("解析轨迹失败: {}", tracking.getTraceInfo());
         }
-        traces.add(trace);
+        if (!traces.contains(trace)) {
+            traces.add(trace);
+        }
         try {
             tracking.setTraceInfo(MAPPER.writeValueAsString(traces));
         } catch (Exception ex) {

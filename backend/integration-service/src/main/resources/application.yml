@@ -72,6 +72,7 @@ logging:
     com.oms: ${LOG_LEVEL:INFO}
 
 oms:
+  internal-service-secret: ${OMS_INTERNAL_SERVICE_SECRET:change-this-internal-secret}
   integration:
     notification:
       provider: ${OMS_INTEGRATION_NOTIFICATION_PROVIDER:smtp}
@@ -83,6 +84,14 @@ oms:
       mock-only: ${OMS_INTEGRATION_LOGISTICS_MOCK_ONLY:true}
       base-url: ${OMS_INTEGRATION_LOGISTICS_BASE_URL:}
       api-key: ${OMS_INTEGRATION_LOGISTICS_API_KEY:}
+    jtexpress:
+      enabled: ${OMS_JTEXPRESS_ENABLED:false}
+      base-url: ${OMS_JTEXPRESS_BASE_URL:https://demoedishops.jtexpress.sg/jts-service-doorstep}
+      email: ${OMS_JTEXPRESS_EMAIL:}
+      password: ${OMS_JTEXPRESS_PASSWORD:}
+      merchant-code: ${OMS_JTEXPRESS_MERCHANT_CODE:}
+      service-code: ${OMS_JTEXPRESS_SERVICE_CODE:DOM123}
+      webhook-secret: ${OMS_JTEXPRESS_WEBHOOK_SECRET:}
     platform:
       mock-only: ${OMS_INTEGRATION_PLATFORM_MOCK_ONLY:true}
       base-url: ${OMS_INTEGRATION_PLATFORM_BASE_URL:}

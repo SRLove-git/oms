@@ -8,6 +8,7 @@ import com.oms.order.client.PaymentClient;
 import com.oms.order.dto.OrderDtos.CancelRequest;
 import com.oms.order.dto.OrderDtos.CreateOrderRequest;
 import com.oms.order.dto.OrderDtos.OrderResponse;
+import com.oms.order.dto.OrderDtos.LogisticsEventRequest;
 import com.oms.order.dto.OrderDtos.OrderSummaryResponse;
 import com.oms.order.dto.OrderDtos.PayRequest;
 import com.oms.order.dto.OrderDtos.ShipRequest;
@@ -16,6 +17,9 @@ import com.oms.order.service.OrderArchiveService;
 import com.oms.order.service.OrderService;
 import com.oms.order.service.OrderReportService;
 import java.time.LocalDate;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,6 +37,9 @@ public class OrderController {
     private final OrderService orderService;
     private final OrderArchiveService orderArchiveService;
     private final OrderReportService orderReportService;
+
+    @Value("${oms.internal-service-secret:change-this-internal-secret}")
+    private String internalServiceSecret;
 
     public OrderController(
             OrderService orderService,
@@ -153,6 +160,19 @@ public class OrderController {
             @RequestHeader(value = "X-User-Id", required = false) Long operatorId,
             @RequestHeader(value = "X-Username", required = false) String operatorName) {
         orderService.sign(orderNo, operatorId, operatorName);
+        return Result.ok();
+    }
+
+    @PostMapping("/internal/logistics-event")
+    public Result<Void> logisticsEvent(
+            @RequestHeader("X-Internal-Secret") String secret,
+            @RequestBody LogisticsEventRequest request) {
+        if (!MessageDigest.isEqual(
+                internalServiceSecret.getBytes(StandardCharsets.UTF_8),
+                secret.getBytes(StandardCharsets.UTF_8))) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        orderService.notifyLogistics(request);
         return Result.ok();
     }
 

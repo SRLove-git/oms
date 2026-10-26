@@ -18,6 +18,7 @@ import com.oms.order.dto.OrderDtos.CreateOrderRequest;
 import com.oms.order.dto.OrderDtos.OrderItemRequest;
 import com.oms.order.dto.OrderDtos.OrderItemResponse;
 import com.oms.order.dto.OrderDtos.OrderLogResponse;
+import com.oms.order.dto.OrderDtos.LogisticsEventRequest;
 import com.oms.order.dto.OrderDtos.OrderPaymentState;
 import com.oms.order.dto.OrderDtos.OrderResponse;
 import com.oms.order.dto.OrderDtos.OrderSummaryResponse;
@@ -554,6 +555,21 @@ public class OrderService {
         order.getOrderNo(), order.getExternalOrderNo(), request.trackingNo(), request.carrier());
   }
 
+    public void notifyLogistics(LogisticsEventRequest request) {
+        if (request == null || request.orderNo() == null || request.orderNo().isBlank()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "orderNo 不能为空");
+        }
+        Order order = findOrder(request.orderNo());
+        mallCallbackNotifier.notifyLogistics(
+                order.getOrderNo(),
+                order.getExternalOrderNo(),
+                order.getStatus(),
+                request.carrier(),
+                request.trackingNo(),
+                request.logisticsStatus(),
+                request.trace());
+    }
+
     @Transactional
     public void sign(String orderNo, Long operatorId, String operatorName) {
         Order order = findOrder(orderNo);
@@ -856,6 +872,9 @@ public class OrderService {
                 order.getPayAmount(),
                 order.getCurrency(),
                 order.getRemark(),
+                order.getConsignee(),
+                order.getPhone(),
+                order.getAddress(),
                 order.getPaidAt(),
                 order.getTimeoutAt(),
                 order.getCreatedAt(),

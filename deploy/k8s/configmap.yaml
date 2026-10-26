@@ -24,6 +24,10 @@ data:
   OMS_REPORT_CACHE_TTL_SECONDS: "300"
   # 真实支付渠道就绪后置 false，并通过 Secret 注入渠道证书/密钥
   OMS_PAYMENT_MOCK_ONLY: "true"
+  # J&T Express SG：先用 staging，完成真实联调后再改 production URL 并启用
+  OMS_JTEXPRESS_ENABLED: "false"
+  OMS_JTEXPRESS_BASE_URL: "https://demoedishops.jtexpress.sg/jts-service-doorstep"
+  OMS_JTEXPRESS_SERVICE_CODE: "DOM123"
 
   # 日志
   LOG_LEVEL: "INFO"
