@@ -106,7 +106,10 @@ jobs:
             fi
           done
           docker compose "\${COMPOSE_ENV_ARGS[@]}" -p buzud -f "\$RELEASE_DIR/deploy/docker-compose.yml" \
-            up -d --build db app buzud-server
+            up -d db
+          PORT=3100 SERVER_PORT=8181 \
+            docker compose "\${COMPOSE_ENV_ARGS[@]}" -p buzud -f "\$RELEASE_DIR/deploy/docker-compose.yml" \
+            up -d --build --force-recreate --no-deps app buzud-server
           REMOTE
 
       - name: Verify public HTTPS
