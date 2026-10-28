@@ -179,8 +179,8 @@ public class JtExpressController {
 
     @PostMapping("/webhook")
     public ResponseEntity<Result<LogisticsResponse>> webhook(
-            @RequestHeader("X-SimplyPost-Id") String requestId,
-            @RequestHeader("X-SimplyPost-Signature") String signature,
+            @RequestHeader(value = "X-SimplyPost-Id", required = false) String requestId,
+            @RequestHeader(value = "X-SimplyPost-Signature", required = false) String signature,
             @RequestBody byte[] body) {
         if (!webhookVerifier.verify(requestId, signature)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)

@@ -76,4 +76,7 @@ OMS_CALLBACK_SECRET=replace-with-a-separate-random-secret
 
 - 集成默认关闭；代码测试只使用本地模拟 HTTP 服务，不会调用 J&T 创建真实运单。
 - webhook 仅精确放行一个路径，并按官方规则使用 `HMAC-SHA1(request-id, secret)` 校验。
+- 缺少或错误的签名头统一返回 HTTP 401，不能让网关的通用异常包装把未签名请求误报为 HTTP 200。
+- J&T Singapore 官方文档未定义 `VALIDATE` 激活事件；如承运商登记时提出额外验证，必须按其
+  书面协议实现最小兼容，不能添加通用的无签名 200 绕过。
 - API 错误不会记录账号密码或 webhook 完整载荷。

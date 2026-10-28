@@ -65,6 +65,17 @@ class JtExpressWebhookControllerTest {
     }
 
     @Test
+    void rejectsMissingSignatureHeadersWithHttp401() {
+        var response = controller.webhook(null, null, "{}".getBytes(StandardCharsets.UTF_8));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().code()).isEqualTo(401);
+        verify(verifier).verify(null, null);
+        verifyNoInteractions(logisticsService, orderLogisticsClient);
+    }
+
+    @Test
     void returnsHttp503SoProviderCanRetryWhenDownstreamFails() {
         when(verifier.verify("request-2", "valid")).thenReturn(true);
         when(logisticsService.upsert(any())).thenThrow(new IllegalStateException("database unavailable"));
