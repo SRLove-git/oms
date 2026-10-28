@@ -2,12 +2,6 @@ name: Deploy medical-sg storefront production
 
 on:
   workflow_dispatch:
-    inputs:
-      diagnostics_only:
-        description: Inspect current storefront containers without changing them
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -22,7 +16,6 @@ jobs:
     timeout-minutes: 35
     steps:
       - name: Checkout storefront
-        if: ${{ !inputs.diagnostics_only }}
         uses: actions/checkout@v4
         with:
           repository: SRLove-git/ikeas
@@ -30,7 +23,6 @@ jobs:
           path: storefront
 
       - name: Package source
-        if: ${{ !inputs.diagnostics_only }}
         id: source
         run: |
           set -euo pipefail
@@ -46,46 +38,7 @@ jobs:
       - name: Install SSH client
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
 
-      - name: Inspect current routing
-        if: ${{ inputs.diagnostics_only }}
-        env:
-          SSHPASS: ${{ secrets.OMS_DEPLOY_PASSWORD }}
-          DEPLOY_HOST: ${{ secrets.OMS_DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.OMS_DEPLOY_USER }}
-        run: |
-          set -euo pipefail
-          SSH=(sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
-          "${SSH[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "bash -s" <<'REMOTE'
-          set -euo pipefail
-          docker ps --format 'table {{.Names}}\t{{.Ports}}\t{{.Label "com.docker.compose.project"}}'
-          docker compose ls
-          docker inspect web-gateway --format 'gateway networks={{json .NetworkSettings.Networks}} mounts={{json .Mounts}}'
-          docker exec web-gateway sh -c "nginx -T 2>/dev/null | grep -n -A20 -B5 'medical-sg.com'" || true
-          docker inspect diy-nginx-lb --format 'tls gateway networks={{json .NetworkSettings.Networks}} mounts={{json .Mounts}}'
-          docker exec diy-nginx-lb sh -c "nginx -T 2>/dev/null | grep -n -A35 -B10 'medical-sg.com'" || true
-          for container in buzud-frontend buzud-server buzud-postgres; do
-            docker inspect "$container" --format '{{.Name}} state={{json .State}} networkMode={{json .HostConfig.NetworkMode}} networks={{json .NetworkSettings.Networks}} ports={{json .NetworkSettings.Ports}}' || true
-            docker logs --tail 60 "$container" 2>&1 || true
-          done
-          for env_file in /opt/buzud/deploy/.env /opt/buzud/.env /opt/buzud/.env.local; do
-            [ -f "$env_file" ] || continue
-            for variable in DB_PASSWORD POSTGRES_PASSWORD; do
-              candidate=$(set -a; . "$env_file"; printenv "$variable" || true)
-              [ -n "$candidate" ] || continue
-              if docker exec -e PGPASSWORD="$candidate" buzud-postgres \
-                psql -h 127.0.0.1 -U buzud -d buzud -Atqc 'select 1' >/dev/null 2>&1; then
-                echo "database auth source: $env_file $variable success"
-              else
-                echo "database auth source: $env_file $variable failed"
-              fi
-            done
-          done
-          find /opt/buzud -maxdepth 3 -type f \( -name 'docker-compose*.yml' -o -name 'compose*.yml' \) -print
-          sed -n '1,240p' /opt/buzud/deploy/docker-compose.yml
-          REMOTE
-
       - name: Upload and deploy
-        if: ${{ !inputs.diagnostics_only }}
         env:
           SSHPASS: ${{ secrets.OMS_DEPLOY_PASSWORD }}
           DEPLOY_HOST: ${{ secrets.OMS_DEPLOY_HOST }}
@@ -135,7 +88,6 @@ jobs:
           REMOTE
 
       - name: Verify public HTTPS
-        if: ${{ !inputs.diagnostics_only }}
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --retry 12 --retry-delay 5 \
