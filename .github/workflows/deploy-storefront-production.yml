@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 35
     steps:
       - name: Checkout storefront
+        if: ${{ !inputs.diagnostics_only }}
         uses: actions/checkout@v4
         with:
           repository: SRLove-git/ikeas
@@ -29,6 +30,7 @@ jobs:
           path: storefront
 
       - name: Package source
+        if: ${{ !inputs.diagnostics_only }}
         id: source
         run: |
           set -euo pipefail
@@ -44,13 +46,31 @@ jobs:
       - name: Install SSH client
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
 
+      - name: Inspect current routing
+        if: ${{ inputs.diagnostics_only }}
+        env:
+          SSHPASS: ${{ secrets.OMS_DEPLOY_PASSWORD }}
+          DEPLOY_HOST: ${{ secrets.OMS_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.OMS_DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          SSH=(sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
+          "${SSH[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "bash -s" <<'REMOTE'
+          set -euo pipefail
+          docker ps --format 'table {{.Names}}\t{{.Ports}}\t{{.Label "com.docker.compose.project"}}'
+          docker compose ls
+          docker inspect web-gateway --format 'gateway networks={{json .NetworkSettings.Networks}} mounts={{json .Mounts}}'
+          docker exec web-gateway sh -c "nginx -T 2>/dev/null | grep -n -A20 -B5 'medical-sg.com'" || true
+          find /opt/buzud -maxdepth 3 -type f \( -name 'docker-compose*.yml' -o -name 'compose*.yml' \) -print
+          REMOTE
+
       - name: Upload and deploy
+        if: ${{ !inputs.diagnostics_only }}
         env:
           SSHPASS: ${{ secrets.OMS_DEPLOY_PASSWORD }}
           DEPLOY_HOST: ${{ secrets.OMS_DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.OMS_DEPLOY_USER }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
-          DIAGNOSTICS_ONLY: ${{ inputs.diagnostics_only }}
         run: |
           set -euo pipefail
           test -n "$SSHPASS"
@@ -65,7 +85,6 @@ jobs:
           "${SSH[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "bash -s" <<REMOTE
           set -euo pipefail
           RELEASE_DIR='$RELEASE_DIR'
-          DIAGNOSTICS_ONLY='$DIAGNOSTICS_ONLY'
           tar -xzf "\$RELEASE_DIR/storefront.tgz" -C "\$RELEASE_DIR"
           for env_file in /opt/buzud/.env /opt/buzud/.env.local; do
             if [ -f "\$env_file" ]; then
@@ -73,11 +92,6 @@ jobs:
               chmod 600 "\$RELEASE_DIR/\$(basename "\$env_file")"
             fi
           done
-          docker ps --format 'table {{.Names}}\t{{.Ports}}\t{{.Label "com.docker.compose.project"}}'
-          docker compose ls
-          if [ "\$DIAGNOSTICS_ONLY" = "true" ]; then
-            exit 0
-          fi
           docker compose -p buzud -f "\$RELEASE_DIR/deploy/docker-compose.yml" \
             up -d --build db app buzud-server
           REMOTE
