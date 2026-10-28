@@ -99,8 +99,12 @@ jobs:
               chmod 600 "\$RELEASE_DIR/\$(basename "\$env_file")"
             fi
           done
+          if [ -f /opt/buzud/deploy/.env ]; then
+            cp /opt/buzud/deploy/.env "\$RELEASE_DIR/deploy/.env"
+            chmod 600 "\$RELEASE_DIR/deploy/.env"
+          fi
           COMPOSE_ENV_ARGS=()
-          for env_file in "\$RELEASE_DIR/.env" "\$RELEASE_DIR/.env.local"; do
+          for env_file in "\$RELEASE_DIR/deploy/.env" "\$RELEASE_DIR/.env" "\$RELEASE_DIR/.env.local"; do
             if [ -f "\$env_file" ]; then
               COMPOSE_ENV_ARGS+=(--env-file "\$env_file")
             fi
