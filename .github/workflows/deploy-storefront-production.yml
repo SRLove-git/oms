@@ -104,7 +104,7 @@ jobs:
             chmod 600 "\$RELEASE_DIR/deploy/.env"
           fi
           COMPOSE_ENV_ARGS=()
-          for env_file in "\$RELEASE_DIR/deploy/.env" "\$RELEASE_DIR/.env" "\$RELEASE_DIR/.env.local"; do
+          for env_file in "\$RELEASE_DIR/.env" "\$RELEASE_DIR/.env.local" "\$RELEASE_DIR/deploy/.env"; do
             if [ -f "\$env_file" ]; then
               COMPOSE_ENV_ARGS+=(--env-file "\$env_file")
             fi
