@@ -95,7 +95,13 @@ jobs:
               chmod 600 "\$RELEASE_DIR/\$(basename "\$env_file")"
             fi
           done
-          docker compose -p buzud -f "\$RELEASE_DIR/deploy/docker-compose.yml" \
+          COMPOSE_ENV_ARGS=()
+          for env_file in "\$RELEASE_DIR/.env" "\$RELEASE_DIR/.env.local"; do
+            if [ -f "\$env_file" ]; then
+              COMPOSE_ENV_ARGS+=(--env-file "\$env_file")
+            fi
+          done
+          docker compose "\${COMPOSE_ENV_ARGS[@]}" -p buzud -f "\$RELEASE_DIR/deploy/docker-compose.yml" \
             up -d --build db app buzud-server
           REMOTE
 
