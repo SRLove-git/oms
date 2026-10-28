@@ -67,6 +67,19 @@ jobs:
             docker inspect "$container" --format '{{.Name}} state={{json .State}} networkMode={{json .HostConfig.NetworkMode}} networks={{json .NetworkSettings.Networks}} ports={{json .NetworkSettings.Ports}}' || true
             docker logs --tail 60 "$container" 2>&1 || true
           done
+          for env_file in /opt/buzud/deploy/.env /opt/buzud/.env /opt/buzud/.env.local; do
+            [ -f "$env_file" ] || continue
+            for variable in DB_PASSWORD POSTGRES_PASSWORD; do
+              candidate=$(set -a; . "$env_file"; printenv "$variable" || true)
+              [ -n "$candidate" ] || continue
+              if docker exec -e PGPASSWORD="$candidate" buzud-postgres \
+                psql -h 127.0.0.1 -U buzud -d buzud -Atqc 'select 1' >/dev/null 2>&1; then
+                echo "database auth source: $env_file $variable success"
+              else
+                echo "database auth source: $env_file $variable failed"
+              fi
+            done
+          done
           find /opt/buzud -maxdepth 3 -type f \( -name 'docker-compose*.yml' -o -name 'compose*.yml' \) -print
           sed -n '1,240p' /opt/buzud/deploy/docker-compose.yml
           REMOTE
