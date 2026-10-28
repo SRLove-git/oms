@@ -71,6 +71,7 @@ jobs:
           JT_PASSWORD: ${{ secrets.OMS_JTEXPRESS_PASSWORD }}
           JT_WEBHOOK_SECRET: ${{ secrets.OMS_JTEXPRESS_WEBHOOK_SECRET }}
           INTERNAL_SECRET: ${{ secrets.OMS_INTERNAL_SERVICE_SECRET }}
+          CALLBACK_SECRET: ${{ secrets.OMS_CALLBACK_SECRET }}
         run: |
           set -euo pipefail
           test -n "$SSHPASS"
@@ -80,6 +81,7 @@ jobs:
           test -n "$JT_PASSWORD"
           test -n "$JT_WEBHOOK_SECRET"
           test -n "$INTERNAL_SECRET"
+          test -n "$CALLBACK_SECRET"
           RELEASE_DIR="/opt/oms/releases/${GITHUB_SHA}"
           SSH=(sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
           SCP=(sshpass -e scp -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
@@ -94,6 +96,7 @@ jobs:
             printf 'OMS_JTEXPRESS_SERVICE_CODE=DOM123\n'
             printf 'OMS_JTEXPRESS_WEBHOOK_SECRET=%s\n' "$JT_WEBHOOK_SECRET"
             printf 'OMS_INTERNAL_SERVICE_SECRET=%s\n' "$INTERNAL_SECRET"
+            printf 'OMS_CALLBACK_SECRET=%s\n' "$CALLBACK_SECRET"
           } > jt.env
           chmod 600 jt.env
           "${SCP[@]}" jt.env "$DEPLOY_USER@$DEPLOY_HOST:$RELEASE_DIR/jt.env"

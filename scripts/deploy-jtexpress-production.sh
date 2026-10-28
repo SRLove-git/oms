@@ -112,7 +112,7 @@ cp "$BACKUP_DIR/env" "$NEXT_ENV"
 while IFS='=' read -r key value; do
   [[ -n "$key" ]] || continue
   case "$key" in
-    OMS_JTEXPRESS_*|OMS_INTERNAL_SERVICE_SECRET) ;;
+    OMS_JTEXPRESS_*|OMS_INTERNAL_SERVICE_SECRET|OMS_CALLBACK_SECRET) ;;
     *) echo "unexpected secret key: $key" >&2; exit 3 ;;
   esac
   TEMP_ENV="$NEXT_ENV.tmp"
@@ -130,6 +130,14 @@ if [[ "$(sed -n 's/^OMS_JTEXPRESS_ENABLED=//p' "$ENV_FILE" | head -n 1)" == "tru
     echo "OMS_JTEXPRESS_ENABLED=true requires a non-empty OMS_JTEXPRESS_WEBHOOK_SECRET" >&2
     false
   fi
+fi
+
+# OMS order/after-sales outbox callbacks must use the same non-default HMAC
+# secret as the storefront callback endpoint.
+OMS_CALLBACK_SECRET="$(sed -n 's/^OMS_CALLBACK_SECRET=//p' "$ENV_FILE" | head -n 1)"
+if [[ -z "$OMS_CALLBACK_SECRET" || "$OMS_CALLBACK_SECRET" == "demo-mall-callback-secret-change-me" ]]; then
+  echo "OMS_CALLBACK_SECRET must be set to a non-default value" >&2
+  false
 fi
 
 NEW_ADMIN="$OMS_ROOT/dist/admin.new-$STAMP"
@@ -170,11 +178,16 @@ wait_healthy oms-admin-web
 
 EXPECTED_JWT_SECRET="$(sed -n 's/^OMS_JWT_SECRET=//p' "$ENV_FILE" | head -n 1)"
 EXPECTED_INTERNAL_SECRET="$(sed -n 's/^OMS_INTERNAL_SERVICE_SECRET=//p' "$ENV_FILE" | head -n 1)"
+EXPECTED_CALLBACK_SECRET="$(sed -n 's/^OMS_CALLBACK_SECRET=//p' "$ENV_FILE" | head -n 1)"
 test -n "$EXPECTED_JWT_SECRET"
 test -n "$EXPECTED_INTERNAL_SECRET"
+test -n "$EXPECTED_CALLBACK_SECRET"
 for container in "${BUSINESS_CONTAINERS[@]:0:7}"; do
   test "$(container_env_value "$container" OMS_JWT_SECRET)" = "$EXPECTED_JWT_SECRET"
   test "$(container_env_value "$container" OMS_INTERNAL_SERVICE_SECRET)" = "$EXPECTED_INTERNAL_SECRET"
+done
+for container in oms-order-service oms-after-sales-service; do
+  test "$(container_env_value "$container" OMS_CALLBACK_SECRET)" = "$EXPECTED_CALLBACK_SECRET"
 done
 
 VERIFY_RESULT="$(docker exec oms-integration-service wget -qO- \
