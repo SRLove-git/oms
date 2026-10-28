@@ -122,6 +122,11 @@ jobs:
               COMPOSE_ENV_ARGS+=(--env-file "\$env_file")
             fi
           done
+          if [ -f "\$RELEASE_DIR/deploy/.env" ]; then
+            set -a
+            . "\$RELEASE_DIR/deploy/.env"
+            set +a
+          fi
           docker compose "\${COMPOSE_ENV_ARGS[@]}" -p buzud -f "\$RELEASE_DIR/deploy/docker-compose.yml" \
             up -d db
           PORT=3100 SERVER_PORT=8181 \
