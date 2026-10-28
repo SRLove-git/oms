@@ -7,6 +7,7 @@ import com.oms.integration.jtexpress.JtExpressDtos.ConnoteResponse;
 import com.oms.integration.jtexpress.JtExpressDtos.ConnectivityResponse;
 import com.oms.integration.jtexpress.JtExpressDtos.CreateShipmentRequest;
 import com.oms.integration.jtexpress.JtExpressDtos.CreateShipmentResponse;
+import com.oms.integration.jtexpress.JtExpressDtos.ItemDetails;
 import com.oms.integration.jtexpress.JtExpressDtos.TrackingResponse;
 import java.io.IOException;
 import java.net.URI;
@@ -17,6 +18,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -45,13 +47,21 @@ public class JtExpressClient {
 
     public CreateShipmentResponse createShipment(CreateShipmentRequest input) {
         requireConfigured();
+        String merchantCode = hasText(input.merchantCode()) ? input.merchantCode() : properties.getMerchantCode();
+        if (!hasText(merchantCode)) {
+            merchantCode = null;
+        }
         CreateShipmentRequest request = new CreateShipmentRequest(
                 input.referenceNumber(),
+                input.originalTrackingNo(),
                 hasText(input.serviceCode()) ? input.serviceCode() : properties.getServiceCode(),
-                hasText(input.merchantCode()) ? input.merchantCode() : properties.getMerchantCode(),
+                merchantCode,
                 hasText(input.orderSource()) ? input.orderSource() : "OMS",
                 input.consigneeDetails(),
-                input.itemDetails());
+                input.pickupDetails(),
+                normalizeItems(input.itemDetails()),
+                input.cod(),
+                input.customsDeclaration());
         CreateShipmentResponse response =
                 sendJson("POST", "/api/gateway/v1/deliveries", request, CreateShipmentResponse.class);
         if (response == null || !hasText(response.trackingId())) {
@@ -75,10 +85,10 @@ public class JtExpressClient {
 
     public ConnoteResponse connote(String id, String style) {
         requireConfigured();
-        String normalizedStyle = "a4".equalsIgnoreCase(style) ? "a4" : "a6";
+        String normalizedStyle = "a4".equalsIgnoreCase(style) ? "A4" : "A6";
         return sendJson(
                 "GET",
-                "/api/gateway/v1/deliveries/connote/" + path(id) + "/" + normalizedStyle,
+                "/api/gateway/v1/deliveries/connote/" + path(id) + "/" + normalizedStyle + "/S1",
                 null,
                 ConnoteResponse.class);
     }
@@ -126,12 +136,96 @@ public class JtExpressClient {
                 throw new IllegalStateException(
                         "J&T Express API 请求失败 status=" + response.statusCode() + " body=" + safeBody(response.body()));
             }
-            return mapper.readValue(response.body(), type);
-        } catch (JtUnauthorizedException ex) {
+            JsonNode root = response.body() == null || response.body().isBlank()
+                    ? null
+                    : mapper.readTree(response.body());
+            ensureBusinessSuccess(root);
+            if (root == null) {
+                if (type == JsonNode.class) {
+                    return null;
+                }
+                throw new JtBusinessException("J&T Express API 返回空响应");
+            }
+            if (type == JsonNode.class) {
+                return type.cast(root);
+            }
+            return mapper.treeToValue(root, type);
+        } catch (JtUnauthorizedException | JtBusinessException ex) {
             throw ex;
         } catch (Exception ex) {
             throw new IllegalStateException("调用 J&T Express API 失败: " + ex.getMessage(), ex);
         }
+    }
+
+    /**
+     * J&T 部分接口会以 HTTP 200 返回 {@code {"status":400,"message":"..."}} 或
+     * {@code {"succ":false,"fail":true}} 的业务错误；必须按响应体再判断一次，
+     * 否则取消/面单失败会被误当成成功。
+     */
+    private static void ensureBusinessSuccess(JsonNode root) {
+        if (root == null || !root.isObject()) {
+            return;
+        }
+        int status = intField(root, "status");
+        int code = intField(root, "code");
+        boolean failed = (root.path("succ").isBoolean() && !root.path("succ").asBoolean())
+                || (root.path("fail").isBoolean() && root.path("fail").asBoolean())
+                || status >= 400
+                || code >= 400;
+        if (!failed) {
+            return;
+        }
+        if (status == 401 || status == 403 || code == 401 || code == 403) {
+            throw new JtUnauthorizedException();
+        }
+        throw new JtBusinessException("J&T Express API 业务失败: " + businessMessage(root));
+    }
+
+    private static int intField(JsonNode root, String field) {
+        JsonNode value = root.path(field);
+        return value.isNumber() ? value.asInt() : -1;
+    }
+
+    private static String businessMessage(JsonNode root) {
+        for (String field : List.of("message", "msg", "error")) {
+            JsonNode value = root.path(field);
+            if (value.isTextual() && hasText(value.asText())) {
+                return value.asText();
+            }
+        }
+        return root.toString();
+    }
+
+    private static List<ItemDetails> normalizeItems(List<ItemDetails> items) {
+        if (items == null) {
+            return null;
+        }
+        List<ItemDetails> normalized = new ArrayList<>(items.size());
+        for (ItemDetails item : items) {
+            normalized.add(new ItemDetails(
+                    item.length(),
+                    item.width(),
+                    item.height(),
+                    item.weight(),
+                    normalizeWeightUnit(item.weightUnit()),
+                    item.description(),
+                    item.quantity()));
+        }
+        return normalized;
+    }
+
+    private static String normalizeWeightUnit(String unit) {
+        if (!hasText(unit)) {
+            return unit;
+        }
+        String trimmed = unit.trim();
+        if ("KG".equalsIgnoreCase(trimmed)) {
+            return "Kg";
+        }
+        if ("G".equalsIgnoreCase(trimmed)) {
+            return "G";
+        }
+        return trimmed;
     }
 
     private String accessToken() {
@@ -144,7 +238,8 @@ public class JtExpressClient {
                 return accessToken;
             }
             accessToken = login();
-            tokenExpiresAt = Instant.now().plus(Duration.ofDays(6).plusHours(23));
+            // J&T 邮件说明 token 7 天过期，要求每 6 天更新。
+            tokenExpiresAt = Instant.now().plus(Duration.ofDays(6));
             return accessToken;
         }
     }
@@ -238,5 +333,11 @@ public class JtExpressClient {
     }
 
     private static final class JtUnauthorizedException extends RuntimeException {
+    }
+
+    private static final class JtBusinessException extends RuntimeException {
+        JtBusinessException(String message) {
+            super(message);
+        }
     }
 }

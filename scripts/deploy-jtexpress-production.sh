@@ -123,6 +123,15 @@ done < "$SECRETS_FILE"
 chmod 600 "$NEXT_ENV"
 mv "$NEXT_ENV" "$ENV_FILE"
 
+# 启用极兔但没有 webhook secret 时，建单能成功但轨迹永远回不来，直接阻止发布。
+if [[ "$(sed -n 's/^OMS_JTEXPRESS_ENABLED=//p' "$ENV_FILE" | head -n 1)" == "true" ]]; then
+  JT_WEBHOOK_SECRET="$(sed -n 's/^OMS_JTEXPRESS_WEBHOOK_SECRET=//p' "$ENV_FILE" | head -n 1)"
+  if [[ -z "$JT_WEBHOOK_SECRET" ]]; then
+    echo "OMS_JTEXPRESS_ENABLED=true requires a non-empty OMS_JTEXPRESS_WEBHOOK_SECRET" >&2
+    false
+  fi
+fi
+
 NEW_ADMIN="$OMS_ROOT/dist/admin.new-$STAMP"
 mkdir -p "$NEW_ADMIN"
 tar -xzf "$RELEASE_DIR/admin.tgz" -C "$NEW_ADMIN"
@@ -169,9 +178,16 @@ for container in "${BUSINESS_CONTAINERS[@]:0:7}"; do
 done
 
 VERIFY_RESULT="$(docker exec oms-integration-service wget -qO- \
+  --header='X-User-Type: 1' \
   'http://127.0.0.1:8086/api/v1/logistics/jtexpress/verify?serviceCode=PUDO')"
 printf '%s\n' "$VERIFY_RESULT"
 grep -q '"connected":true' <<< "$VERIFY_RESULT"
+
+STATUS_RESULT="$(docker exec oms-integration-service wget -qO- \
+  --header='X-User-Type: 1' \
+  'http://127.0.0.1:8086/api/v1/logistics/jtexpress/status')"
+printf '%s\n' "$STATUS_RESULT"
+grep -q '"webhookConfigured":true' <<< "$STATUS_RESULT"
 compose ps "${BUSINESS_SERVICES[@]}"
 
 rm -f "$SECRETS_FILE"

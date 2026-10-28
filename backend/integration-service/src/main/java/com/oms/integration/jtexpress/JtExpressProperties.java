@@ -19,6 +19,13 @@ public class JtExpressProperties {
         return enabled && hasText(baseUrl) && hasText(email) && hasText(password);
     }
 
+    /**
+     * webhook 签名密钥是否已配置。建单只依赖账号密码，但轨迹回写还依赖该密钥。
+     */
+    public boolean isWebhookConfigured() {
+        return hasText(webhookSecret);
+    }
+
     public boolean isEnabled() {
         return enabled;
     }

@@ -76,7 +76,7 @@ export interface JtShipmentInput {
   }
   item_details: Array<{
     weight: number
-    weight_unit: 'G' | 'KG'
+    weight_unit: 'G' | 'Kg'
     description?: string
     quantity?: number
   }>
@@ -88,12 +88,35 @@ export interface JtShipmentResult {
   sorting_code?: string
 }
 
+export interface JtConnoteResult {
+  reference_number: string
+  connote_label_url: string
+}
+
 export async function createJtShipment(input: JtShipmentInput) {
   const res = await request.post<ApiResult<JtShipmentResult>>(
     '/logistics/jtexpress/shipments',
     input,
+    // 极兔建单是同步外部调用，给足超时时间，避免前端先超时而后端已建单。
+    { timeout: 35000 },
   )
   return res.data.data
+}
+
+export async function getJtConnote(trackingId: string, style: 'a4' | 'a6' = 'a6') {
+  const res = await request.get<ApiResult<JtConnoteResult>>(
+    `/logistics/jtexpress/connote/${encodeURIComponent(trackingId)}`,
+    { params: { style } },
+  )
+  return res.data.data
+}
+
+export async function cancelJtShipment(trackingId: string, reason: string) {
+  const res = await request.post<ApiResult<unknown>>('/logistics/jtexpress/cancel', {
+    id: trackingId,
+    reason,
+  })
+  return res.data
 }
 
 export async function signOrder(orderNo: string) {

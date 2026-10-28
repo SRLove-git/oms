@@ -90,7 +90,7 @@ jobs:
             printf 'OMS_JTEXPRESS_BASE_URL=https://edishops.jtexpress.sg/jts-service-doorstep\n'
             printf 'OMS_JTEXPRESS_EMAIL=%s\n' "$JT_EMAIL"
             printf 'OMS_JTEXPRESS_PASSWORD=%s\n' "$JT_PASSWORD"
-            printf 'OMS_JTEXPRESS_MERCHANT_CODE=\n'
+            printf 'OMS_JTEXPRESS_MERCHANT_CODE=C0314\n'
             printf 'OMS_JTEXPRESS_SERVICE_CODE=DOM123\n'
             printf 'OMS_JTEXPRESS_WEBHOOK_SECRET=%s\n' "$JT_WEBHOOK_SECRET"
             printf 'OMS_INTERNAL_SERVICE_SECRET=%s\n' "$INTERNAL_SECRET"

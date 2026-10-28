@@ -548,13 +548,14 @@ public class OrderService {
     }
 
     @Transactional
-  public void ship(String orderNo, ShipRequest request, Long operatorId, String operatorName) {
-    Order order = findOrder(orderNo);
-    transit(order, OrderStatus.SHIPPED, operatorId, operatorName, "发货");
-    mallCallbackNotifier.notifyShipment(
-        order.getOrderNo(), order.getExternalOrderNo(), request.trackingNo(), request.carrier());
-  }
+    public void ship(String orderNo, ShipRequest request, Long operatorId, String operatorName) {
+        Order order = findOrder(orderNo);
+        transit(order, OrderStatus.SHIPPED, operatorId, operatorName, "发货");
+        mallCallbackNotifier.notifyShipment(
+                order.getOrderNo(), order.getExternalOrderNo(), request.trackingNo(), request.carrier());
+    }
 
+    @Transactional
     public void notifyLogistics(LogisticsEventRequest request) {
         if (request == null || request.orderNo() == null || request.orderNo().isBlank()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "orderNo 不能为空");
@@ -568,6 +569,21 @@ public class OrderService {
                 request.trackingNo(),
                 request.logisticsStatus(),
                 request.trace());
+        // 极兔送达回调直接推进订单到已签收，避免运营再手工点一次“签收”。
+        if ("signed".equalsIgnoreCase(request.logisticsStatus())
+                && order.getStatus() == OrderStatus.SHIPPED
+                && transitIfStatus(order.getId(), OrderStatus.SHIPPED, OrderStatus.SIGNED)) {
+            order.setStatus(OrderStatus.SIGNED);
+            appendLog(
+                    order.getId(),
+                    OrderStatus.SHIPPED,
+                    OrderStatus.SIGNED,
+                    null,
+                    "J&T",
+                    "极兔送达自动签收");
+            mallCallbackNotifier.notifyOrderStatus(
+                    order.getOrderNo(), order.getExternalOrderNo(), OrderStatus.SIGNED, "order.signed");
+        }
     }
 
     @Transactional

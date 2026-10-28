@@ -5,10 +5,14 @@ import { Message } from '@arco-design/web-vue'
 import { getLogisticsByOrder, type LogisticsRecord } from '@/api/integrations'
 
 const STATUS_NAMES: Record<string, string> = {
+  created: '已建单',
+  pending_pickup: '待揽收',
   picked_up: '已揽收',
   in_transit: '运输中',
   out_for_delivery: '派送中',
   signed: '已签收',
+  cancelled: '已取消',
+  returned: '退回中',
   exception: '异常',
 }
 

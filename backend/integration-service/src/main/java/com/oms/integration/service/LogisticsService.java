@@ -55,6 +55,9 @@ public class LogisticsService {
             trackingMapper.insert(tracking);
         } else {
             tracking.setStatus(request.status());
+            if (hasText(request.orderNo()) && !hasText(tracking.getOrderNo())) {
+                tracking.setOrderNo(request.orderNo());
+            }
             tracking.setPushed(0);
             trackingMapper.updateById(tracking);
         }
@@ -77,16 +80,43 @@ public class LogisticsService {
     }
 
     public LogisticsResponse getByOrderNo(String orderNo) {
-        LogisticsTracking tracking = trackingMapper.selectOne(new LambdaQueryWrapper<LogisticsTracking>()
-                .eq(LogisticsTracking::getOrderNo, orderNo)
-                .eq(LogisticsTracking::getDeleted, 0)
-                .orderByDesc(LogisticsTracking::getId)
-                .last("LIMIT 1"));
+        LogisticsTracking tracking = findTrackingByOrderNo(orderNo);
         if (tracking == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "该订单暂无物流轨迹");
         }
         syncFromProvider(tracking, tracking.getTrackingNo(), tracking.getCarrier());
         return toResponse(tracking);
+    }
+
+    /**
+     * 按订单号查最新一条物流记录，没有则返回 null。建单幂等复用和订单取消联动使用。
+     */
+    public LogisticsResponse findLatestByOrderNo(String orderNo) {
+        LogisticsTracking tracking = findTrackingByOrderNo(orderNo);
+        return tracking == null ? null : toResponse(tracking);
+    }
+
+    public LogisticsResponse findLatestByTrackingNo(String trackingNo, String carrier) {
+        if (!hasText(trackingNo) || !hasText(carrier)) {
+            return null;
+        }
+        LogisticsTracking tracking = trackingMapper.selectOne(new LambdaQueryWrapper<LogisticsTracking>()
+                .eq(LogisticsTracking::getCarrier, carrier)
+                .eq(LogisticsTracking::getTrackingNo, trackingNo)
+                .eq(LogisticsTracking::getDeleted, 0)
+                .last("LIMIT 1"));
+        return tracking == null ? null : toResponse(tracking);
+    }
+
+    private LogisticsTracking findTrackingByOrderNo(String orderNo) {
+        if (!hasText(orderNo)) {
+            return null;
+        }
+        return trackingMapper.selectOne(new LambdaQueryWrapper<LogisticsTracking>()
+                .eq(LogisticsTracking::getOrderNo, orderNo)
+                .eq(LogisticsTracking::getDeleted, 0)
+                .orderByDesc(LogisticsTracking::getId)
+                .last("LIMIT 1"));
     }
 
     private void syncFromProvider(LogisticsTracking tracking, String trackingNo, String carrier) {
@@ -156,5 +186,9 @@ public class LogisticsService {
                 tracking.getStatus(),
                 traces,
                 tracking.getUpdatedAt());
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

@@ -39,7 +39,10 @@ export interface TemplateRecord {
 }
 
 export async function getLogisticsByOrder(orderNo: string) {
-  const res = await request.get<ApiResult<LogisticsRecord>>(`/logistics/by-order/${orderNo}`)
+  const res = await request.get<ApiResult<LogisticsRecord>>(`/logistics/by-order/${orderNo}`, {
+    // 查询会同步极兔轨迹，可能比普通接口慢。
+    timeout: 20000,
+  })
   return res.data.data
 }
 

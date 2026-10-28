@@ -1,6 +1,7 @@
 package com.oms.integration.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.oms.common.core.exception.BusinessException;
 import com.oms.common.core.result.ErrorCode;
 import com.oms.common.core.result.Result;
 import com.oms.integration.client.OrderLogisticsClient;
@@ -21,6 +22,8 @@ import com.oms.integration.jtexpress.JtExpressProperties;
 import com.oms.integration.jtexpress.JtExpressWebhookVerifier;
 import com.oms.integration.service.LogisticsService;
 import jakarta.validation.Valid;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,37 +71,109 @@ public class JtExpressController {
     }
 
     @GetMapping("/status")
-    public Result<StatusResponse> status() {
+    public Result<StatusResponse> status(
+            @RequestHeader(value = "X-User-Type", required = false) Integer userType) {
+        requireAdmin(userType);
         String baseUrl = properties.getBaseUrl();
         String environment = baseUrl != null && baseUrl.contains("demoedishops") ? "staging" : "production";
         return Result.ok(new StatusResponse(
-                properties.isEnabled(), properties.isConfigured(), environment, baseUrl));
+                properties.isEnabled(),
+                properties.isConfigured(),
+                environment,
+                baseUrl,
+                properties.isWebhookConfigured()));
     }
 
     @GetMapping("/verify")
     public Result<ConnectivityResponse> verify(
-            @RequestParam(defaultValue = "PUDO") String serviceCode) {
+            @RequestParam(defaultValue = "PUDO") String serviceCode,
+            @RequestHeader(value = "X-User-Type", required = false) Integer userType) {
+        requireAdmin(userType);
         return Result.ok(client.verifyConnectivity(serviceCode));
     }
 
     @PostMapping("/shipments")
-    public Result<CreateShipmentResponse> create(@Valid @RequestBody CreateShipmentRequest request) {
-        return Result.ok(client.createShipment(request));
+    public Result<CreateShipmentResponse> create(
+            @Valid @RequestBody CreateShipmentRequest request,
+            @RequestHeader(value = "X-User-Type", required = false) Integer userType) {
+        requireAdmin(userType);
+        LogisticsResponse existing = logisticsService.findLatestByOrderNo(request.referenceNumber());
+        if (existing != null
+                && "J&T Express SG".equals(existing.carrier())
+                && !isTerminal(existing.status())) {
+            // 前端超时重试/重复点击时复用已创建的运单，避免在 J&T 侧重复建单。
+            return Result.ok(new CreateShipmentResponse(
+                    existing.trackingNo(), request.referenceNumber(), null));
+        }
+        CreateShipmentResponse response = client.createShipment(request);
+        logisticsService.upsert(new LogisticsCallbackRequest(
+                response.trackingId(),
+                "J&T Express SG",
+                "created",
+                "J&T shipment created",
+                request.referenceNumber()));
+        return Result.ok(response);
     }
 
     @GetMapping("/track/{id}")
-    public Result<TrackingResponse> track(@PathVariable String id) {
+    public Result<TrackingResponse> track(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Type", required = false) Integer userType) {
+        requireAdmin(userType);
         return Result.ok(client.track(id));
     }
 
     @PostMapping("/cancel")
-    public Result<CancelResponse> cancel(@Valid @RequestBody CancelRequest request) {
-        return Result.ok(client.cancel(request.id(), request.reason()));
+    public Result<CancelResponse> cancel(
+            @Valid @RequestBody CancelRequest request,
+            @RequestHeader(value = "X-User-Type", required = false) Integer userType) {
+        requireAdmin(userType);
+        CancelResponse response = client.cancel(request.id(), request.reason());
+        boolean cancelled = response != null
+                && response.success() != null
+                && !response.success().isEmpty()
+                && response.errors() != null
+                && response.errors().isEmpty();
+        if (!cancelled) {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST.getCode(),
+                    "J&T 取消运单失败: " + (response == null ? "空响应" : response.errors()));
+        }
+        LogisticsResponse existing =
+                logisticsService.findLatestByTrackingNo(request.id(), "J&T Express SG");
+        if (existing != null) {
+            String reason = hasText(request.reason()) ? request.reason() : "OMS 取消运单";
+            try {
+                logisticsService.upsert(new LogisticsCallbackRequest(
+                        request.id(),
+                        "J&T Express SG",
+                        "cancelled",
+                        "J&T shipment cancelled: " + reason,
+                        existing.orderNo()));
+                if (hasText(existing.orderNo())) {
+                    orderLogisticsClient.notifyLogistics(
+                            internalServiceSecret,
+                            new LogisticsEventRequest(
+                                    existing.orderNo(),
+                                    "J&T Express SG",
+                                    request.id(),
+                                    "cancelled",
+                                    "cancelled: " + reason));
+                }
+            } catch (RuntimeException ex) {
+                // J&T 已取消成功，本地同步失败只记录，不能把取消结果误报为失败。
+                log.warn("J&T cancel succeeded but local sync failed trackingId={}", request.id(), ex);
+            }
+        }
+        return Result.ok(response);
     }
 
     @GetMapping("/connote/{id}")
     public Result<ConnoteResponse> connote(
-            @PathVariable String id, @RequestParam(defaultValue = "a6") String style) {
+            @PathVariable String id,
+            @RequestParam(defaultValue = "a6") String style,
+            @RequestHeader(value = "X-User-Type", required = false) Integer userType) {
+        requireAdmin(userType);
         return Result.ok(client.connote(id, style));
     }
 
@@ -120,9 +195,7 @@ public class JtExpressController {
         }
         try {
             String status = normalizeStatus(payload.status());
-            String trace = String.join(" ",
-                    payload.timestamp() == null ? "" : payload.timestamp(),
-                    payload.status() == null ? "" : payload.status()).trim();
+            String trace = buildTrace(payload);
             LogisticsResponse saved = logisticsService.upsert(new LogisticsCallbackRequest(
                     payload.trackingId(),
                     "J&T Express SG",
@@ -145,18 +218,57 @@ public class JtExpressController {
         }
     }
 
+    private static String buildTrace(WebhookPayload payload) {
+        List<String> parts = new ArrayList<>();
+        if (hasText(payload.timestamp())) {
+            parts.add(payload.timestamp());
+        }
+        if (hasText(payload.status())) {
+            parts.add(payload.status());
+        }
+        if (hasText(payload.comments())) {
+            parts.add(payload.comments());
+        }
+        if (payload.noOfAttempts() != null) {
+            parts.add("attempts=" + payload.noOfAttempts());
+        }
+        if (hasText(payload.podUrl())) {
+            parts.add("POD=" + payload.podUrl());
+        }
+        return String.join(" ", parts);
+    }
+
     private static String normalizeStatus(String status) {
         if (status == null) {
             return "unknown";
         }
         return switch (status.toUpperCase(Locale.ROOT)) {
             case "PENDING_PICKUP", "ASSIGNED_PICKUP", "ACCEPTED_PICKUP" -> "pending_pickup";
-            case "ENROUTE_TO_HUB", "ARRIVED_AT_HUB", "OUT_FOR_DELIVERY",
-                    "FORWARDED_TO_SHIPPING_PARTNER", "MERCHANT_DROPPED_OFF" -> "in_transit";
+            case "ENROUTE_TO_HUB", "ARRIVED_AT_HUB", "FORWARDED_TO_SHIPPING_PARTNER",
+                    "MERCHANT_DROPPED_OFF", "DEPOSITED", "LOCKER_BOOKED" -> "in_transit";
+            case "OUT_FOR_DELIVERY" -> "out_for_delivery";
             case "DELIVERED", "COLLECTED" -> "signed";
             case "CANCELLED" -> "cancelled";
-            case "RETURNED_TO_SENDER", "RETURNED_TO_HUB", "SCHEDULED_RTS", "OUT_FOR_RTS" -> "returned";
+            case "RETURNED_TO_SENDER", "RETURNED_TO_HUB", "SCHEDULED_RTS", "OUT_FOR_RTS",
+                    "RETRIEVED", "OVERSTAYED_RETRIEVED" -> "returned";
+            case "FAILED_DELIVERY", "FAILED_PICKUP", "FAILED_RTS", "PARCEL_DISPOSED",
+                    "PARCEL_LEAKAGE", "PARCEL_LOST", "PARCEL_DAMAGED", "NO_LOCKER_AVAILABLE",
+                    "OVERSTAYED_PARCEL" -> "exception";
             default -> "exception";
         };
+    }
+
+    private static boolean isTerminal(String status) {
+        return "cancelled".equalsIgnoreCase(status) || "returned".equalsIgnoreCase(status);
+    }
+
+    private static void requireAdmin(Integer userType) {
+        if (userType == null || userType != 1) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

@@ -4,15 +4,19 @@ import { Message, Modal } from '@arco-design/web-vue'
 
 import {
   auditOrder,
+  cancelJtShipment,
   cancelOrder,
   completeOrder,
   createJtShipment,
+  getJtConnote,
   getOrder,
   pageOrders,
   shipOrder,
   signOrder,
 } from '@/api/orders'
 import type { OrderDetail, OrderSummary } from '@/api/orders'
+import { getLogisticsByOrder } from '@/api/integrations'
+import type { LogisticsRecord } from '@/api/integrations'
 
 const STATUS_NAMES: Record<number, string> = {
   1: '待支付',
@@ -25,6 +29,17 @@ const STATUS_NAMES: Record<number, string> = {
   8: '售后处理中',
 }
 
+const LOGISTICS_STATUS_NAMES: Record<string, string> = {
+  created: '已建单',
+  pending_pickup: '待揽收',
+  in_transit: '运输中',
+  out_for_delivery: '派送中',
+  signed: '已签收',
+  cancelled: '已取消',
+  returned: '退回中',
+  exception: '异常',
+}
+
 const loading = ref(false)
 const list = ref<OrderSummary[]>([])
 const total = ref(0)
@@ -35,6 +50,12 @@ const detailVisible = ref(false)
 const detail = ref<OrderDetail | null>(null)
 const shipVisible = ref(false)
 const shipping = ref(false)
+const logisticsVisible = ref(false)
+const logisticsLoading = ref(false)
+const logistics = ref<LogisticsRecord | null>(null)
+const logisticsOrderStatus = ref<number | null>(null)
+const labelLoading = ref(false)
+const cancelShipmentLoading = ref(false)
 const shipForm = reactive({
   orderNo: '',
   trackingNo: '',
@@ -44,7 +65,7 @@ const shipForm = reactive({
   address: '',
   postcode: '',
   weight: 500,
-  weightUnit: 'G' as 'G' | 'KG',
+  weightUnit: 'G' as 'G' | 'Kg',
   serviceCode: 'DOM123',
 })
 
@@ -112,6 +133,20 @@ async function openShip(orderNo: string) {
 }
 
 async function submitShip() {
+  if (shipForm.carrier === 'J&T Express SG' && !shipForm.trackingNo.trim()) {
+    if (!shipForm.contactName.trim() || !shipForm.phoneNumber.trim() || !shipForm.address.trim()) {
+      Message.error('请填写收件人、联系电话和收货地址')
+      return
+    }
+    if (!/^\d{6}$/.test(shipForm.postcode.trim())) {
+      Message.error('请输入 6 位新加坡邮编')
+      return
+    }
+    if (!(Number(shipForm.weight) > 0)) {
+      Message.error('包裹重量必须大于 0')
+      return
+    }
+  }
   shipping.value = true
   try {
     let trackingNo = shipForm.trackingNo.trim()
@@ -147,6 +182,62 @@ async function submitShip() {
   } finally {
     shipping.value = false
   }
+}
+
+async function showLogistics(orderNo: string, orderStatus: number) {
+  logisticsOrderStatus.value = orderStatus
+  logisticsLoading.value = true
+  try {
+    logistics.value = await getLogisticsByOrder(orderNo)
+    logisticsVisible.value = true
+  } catch {
+    logistics.value = null
+  } finally {
+    logisticsLoading.value = false
+  }
+}
+
+async function printLabel() {
+  const current = logistics.value
+  if (!current || current.carrier !== 'J&T Express SG') {
+    return
+  }
+  labelLoading.value = true
+  try {
+    const connote = await getJtConnote(current.trackingNo, 'a6')
+    if (!connote.connote_label_url) {
+      Message.error('极兔未返回面单地址')
+      return
+    }
+    window.open(connote.connote_label_url, '_blank', 'noopener,noreferrer')
+  } finally {
+    labelLoading.value = false
+  }
+}
+
+function cancelShipment() {
+  const current = logistics.value
+  if (!current || current.carrier !== 'J&T Express SG') {
+    return
+  }
+  if (logisticsOrderStatus.value !== 3) {
+    Message.warning('已发货订单请走售后/退货流程，不能直接取消运单')
+    return
+  }
+  Modal.confirm({
+    title: '取消极兔运单',
+    content: `确定取消运单 ${current.trackingNo}？取消后需重新建单才能发货。`,
+    onOk: async () => {
+      cancelShipmentLoading.value = true
+      try {
+        await cancelJtShipment(current.trackingNo, '管理员取消运单')
+        Message.success('极兔运单已取消')
+        await showLogistics(current.orderNo, 3)
+      } finally {
+        cancelShipmentLoading.value = false
+      }
+    },
+  })
 }
 
 function onPageChange(value: number) {
@@ -192,10 +283,17 @@ onMounted(load)
         <a-table-column title="金额" data-index="totalAmount" :width="110" />
         <a-table-column title="商品数" data-index="itemCount" :width="90" />
         <a-table-column title="创建时间" data-index="createdAt" :width="180" />
-        <a-table-column title="操作" :width="320" fixed="right">
+        <a-table-column title="操作" :width="380" fixed="right">
           <template #cell="{ record }">
             <a-space>
               <a-button size="mini" @click="showDetail(record.orderNo)">详情</a-button>
+              <a-button
+                v-if="[3, 4, 5, 6].includes(record.status)"
+                size="mini"
+                @click="showLogistics(record.orderNo, record.status)"
+              >
+                物流
+              </a-button>
               <a-button
                 v-if="record.status === 2"
                 size="mini"
@@ -295,6 +393,57 @@ onMounted(load)
       </a-timeline>
     </a-modal>
 
+    <a-modal v-model:visible="logisticsVisible" title="物流信息" :footer="false" :width="640">
+      <template v-if="logistics">
+        <a-descriptions :column="2" bordered size="small">
+          <a-descriptions-item label="承运商">{{ logistics.carrier }}</a-descriptions-item>
+          <a-descriptions-item label="运单号">{{ logistics.trackingNo }}</a-descriptions-item>
+          <a-descriptions-item label="状态">
+            {{ LOGISTICS_STATUS_NAMES[logistics.status] || logistics.status }}
+          </a-descriptions-item>
+          <a-descriptions-item label="订单号">{{ logistics.orderNo }}</a-descriptions-item>
+          <a-descriptions-item label="更新时间" :span="2">
+            {{ logistics.updatedAt }}
+          </a-descriptions-item>
+        </a-descriptions>
+
+        <a-space style="margin-top: 16px">
+          <a-button
+            v-if="logistics.carrier === 'J&T Express SG'"
+            type="primary"
+            :loading="labelLoading"
+            @click="printLabel"
+          >
+            打印 A6 面单
+          </a-button>
+          <a-button
+            v-if="logistics.carrier === 'J&T Express SG' && logisticsOrderStatus === 3"
+            status="danger"
+            :loading="cancelShipmentLoading"
+            :disabled="['signed', 'cancelled', 'returned'].includes(logistics.status)"
+            @click="cancelShipment"
+          >
+            取消运单
+          </a-button>
+          <span v-if="logistics.carrier !== 'J&T Express SG'" style="color: #86909c; font-size: 12px">
+            非极兔运单
+          </span>
+          <span
+            v-else-if="logisticsOrderStatus !== 3"
+            style="color: #86909c; font-size: 12px"
+          >
+            已发货订单请走售后/退货流程
+          </span>
+        </a-space>
+
+        <a-timeline v-if="logistics.trace.length" class="detail-timeline">
+          <a-timeline-item v-for="(trace, index) in logistics.trace" :key="index">
+            {{ trace }}
+          </a-timeline-item>
+        </a-timeline>
+      </template>
+    </a-modal>
+
     <a-modal v-model:visible="shipVisible" title="订单发货" :ok-loading="shipping" @ok="submitShip">
       <a-form layout="vertical" :model="shipForm">
         <a-form-item label="承运商">
@@ -334,14 +483,14 @@ onMounted(load)
             <a-form-item label="重量单位">
               <a-select
                 v-model="shipForm.weightUnit"
-                :options="['G', 'KG'].map((c) => ({ value: c, label: c }))"
+                :options="['G', 'Kg'].map((c) => ({ value: c, label: c }))"
                 style="width: 110px"
               />
             </a-form-item>
             <a-form-item label="服务代码">
               <a-select
                 v-model="shipForm.serviceCode"
-                :options="['DOM123', 'DOMN', 'FMD', 'RT'].map((c) => ({ value: c, label: c }))"
+                :options="['DOM123', 'DOMN'].map((c) => ({ value: c, label: c }))"
                 style="width: 130px"
               />
             </a-form-item>

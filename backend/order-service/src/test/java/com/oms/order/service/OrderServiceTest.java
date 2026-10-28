@@ -1,5 +1,6 @@
 package com.oms.order.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
@@ -15,6 +16,7 @@ import com.oms.order.client.PaymentClient;
 import com.oms.order.client.SkuInfo;
 import com.oms.order.constant.OrderStatus;
 import com.oms.order.dto.OrderDtos.CreateOrderRequest;
+import com.oms.order.dto.OrderDtos.LogisticsEventRequest;
 import com.oms.order.dto.OrderDtos.OrderItemRequest;
 import com.oms.order.dto.OrderDtos.PaymentSuccessRequest;
 import com.oms.order.entity.Order;
@@ -100,6 +102,20 @@ class OrderServiceTest {
                 new PaymentSuccessRequest("O001", "P001", "mock", new BigDecimal("100.00"), "TXN1"));
 
         verify(inventoryClient, times(1)).deduct(any());
+    }
+
+    @Test
+    void deliveredLogisticsShouldSignShippedOrder() {
+        Order order = order(OrderStatus.SHIPPED);
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order);
+        when(orderMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+
+        orderService.notifyLogistics(
+                new LogisticsEventRequest("O001", "J&T Express SG", "JT1", "signed", "DELIVERED"));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.SIGNED);
+        verify(mallCallbackNotifier)
+                .notifyOrderStatus("O001", null, OrderStatus.SIGNED, "order.signed");
     }
 
     private Order order(int status) {
