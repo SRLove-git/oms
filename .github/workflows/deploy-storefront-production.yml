@@ -2,6 +2,12 @@ name: Deploy medical-sg storefront production
 
 on:
   workflow_dispatch:
+    inputs:
+      diagnostics_only:
+        description: Inspect current storefront containers without changing them
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -44,6 +50,7 @@ jobs:
           DEPLOY_HOST: ${{ secrets.OMS_DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.OMS_DEPLOY_USER }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          DIAGNOSTICS_ONLY: ${{ inputs.diagnostics_only }}
         run: |
           set -euo pipefail
           test -n "$SSHPASS"
@@ -58,6 +65,7 @@ jobs:
           "${SSH[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "bash -s" <<REMOTE
           set -euo pipefail
           RELEASE_DIR='$RELEASE_DIR'
+          DIAGNOSTICS_ONLY='$DIAGNOSTICS_ONLY'
           tar -xzf "\$RELEASE_DIR/storefront.tgz" -C "\$RELEASE_DIR"
           for env_file in /opt/buzud/.env /opt/buzud/.env.local; do
             if [ -f "\$env_file" ]; then
@@ -65,11 +73,17 @@ jobs:
               chmod 600 "\$RELEASE_DIR/\$(basename "\$env_file")"
             fi
           done
+          docker ps --format 'table {{.Names}}\t{{.Ports}}\t{{.Label "com.docker.compose.project"}}'
+          docker compose ls
+          if [ "\$DIAGNOSTICS_ONLY" = "true" ]; then
+            exit 0
+          fi
           docker compose -p buzud -f "\$RELEASE_DIR/deploy/docker-compose.yml" \
             up -d --build db app buzud-server
           REMOTE
 
       - name: Verify public HTTPS
+        if: ${{ !inputs.diagnostics_only }}
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --retry 12 --retry-delay 5 \
