@@ -1,0 +1,78 @@
+name: Deploy medical-sg storefront production
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: medical-sg-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout storefront
+        uses: actions/checkout@v4
+        with:
+          repository: SRLove-git/ikeas
+          ref: master
+          path: storefront
+
+      - name: Package source
+        id: source
+        run: |
+          set -euo pipefail
+          SHA="$(git -C storefront rev-parse HEAD)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          tar \
+            --exclude=.git \
+            --exclude='frontend/node_modules' \
+            --exclude='frontend/.next' \
+            --exclude='backend/target' \
+            -C storefront -czf storefront.tgz .
+
+      - name: Install SSH client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+      - name: Upload and deploy
+        env:
+          SSHPASS: ${{ secrets.OMS_DEPLOY_PASSWORD }}
+          DEPLOY_HOST: ${{ secrets.OMS_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.OMS_DEPLOY_USER }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test -n "$SSHPASS"
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$SOURCE_SHA"
+          RELEASE_DIR="/opt/buzud/releases/storefront-$SOURCE_SHA"
+          SSH=(sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
+          SCP=(sshpass -e scp -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
+          "${SSH[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$RELEASE_DIR'"
+          "${SCP[@]}" storefront.tgz "$DEPLOY_USER@$DEPLOY_HOST:$RELEASE_DIR/storefront.tgz"
+          "${SSH[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "bash -s" <<REMOTE
+          set -euo pipefail
+          RELEASE_DIR='$RELEASE_DIR'
+          tar -xzf "\$RELEASE_DIR/storefront.tgz" -C "\$RELEASE_DIR"
+          for env_file in /opt/buzud/.env /opt/buzud/.env.local; do
+            if [ -f "\$env_file" ]; then
+              cp "\$env_file" "\$RELEASE_DIR/\$(basename "\$env_file")"
+              chmod 600 "\$RELEASE_DIR/\$(basename "\$env_file")"
+            fi
+          done
+          docker compose -p buzud -f "\$RELEASE_DIR/deploy/docker-compose.yml" \
+            up -d --build db app buzud-server
+          REMOTE
+
+      - name: Verify public HTTPS
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 \
+            https://medical-sg.com/ >/dev/null
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 \
+            https://medical-sg.com/api/v1/health >/dev/null
