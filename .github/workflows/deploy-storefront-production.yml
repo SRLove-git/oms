@@ -63,6 +63,10 @@ jobs:
           docker exec web-gateway sh -c "nginx -T 2>/dev/null | grep -n -A20 -B5 'medical-sg.com'" || true
           docker inspect diy-nginx-lb --format 'tls gateway networks={{json .NetworkSettings.Networks}} mounts={{json .Mounts}}'
           docker exec diy-nginx-lb sh -c "nginx -T 2>/dev/null | grep -n -A35 -B10 'medical-sg.com'" || true
+          for container in buzud-frontend buzud-server buzud-postgres; do
+            docker inspect "$container" --format '{{.Name}} state={{json .State}} ports={{json .HostConfig.PortBindings}}' || true
+            docker logs --tail 60 "$container" 2>&1 || true
+          done
           find /opt/buzud -maxdepth 3 -type f \( -name 'docker-compose*.yml' -o -name 'compose*.yml' \) -print
           sed -n '1,240p' /opt/buzud/deploy/docker-compose.yml
           REMOTE
