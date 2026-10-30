@@ -123,7 +123,19 @@ public class LogisticsService {
         if (!logisticsProvider.isConfigured() || trackingNo == null || carrier == null) {
             return;
         }
-        List<String> remoteTraces = logisticsProvider.query(trackingNo, carrier);
+        List<String> remoteTraces;
+        try {
+            remoteTraces = logisticsProvider.query(trackingNo, carrier);
+        } catch (RuntimeException ex) {
+            // 物流查询是读取增强，承运商短暂不可用或响应新增字段时仍应返回 OMS
+            // 已保存的运单信息，不能让订单管理页退化成 500。
+            log.warn(
+                    "同步承运商轨迹失败，返回本地物流记录 trackingNo={} carrier={} error={}",
+                    trackingNo,
+                    carrier,
+                    ex.getMessage());
+            return;
+        }
         if (remoteTraces == null || remoteTraces.isEmpty()) {
             return;
         }

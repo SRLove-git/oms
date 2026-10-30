@@ -12,6 +12,7 @@ import com.oms.integration.jtexpress.JtExpressDtos.ItemDetails;
 import com.oms.integration.jtexpress.JtExpressDtos.Money;
 import com.oms.integration.jtexpress.JtExpressDtos.PickupDetails;
 import com.oms.integration.jtexpress.JtExpressDtos.TimeWindow;
+import com.oms.integration.jtexpress.JtExpressDtos.TrackingResponse;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -156,6 +157,34 @@ class JtExpressClientTest {
                 List.of(new ItemDetails(null, null, null, BigDecimal.ONE, "KG", "Medical item", 1)));
 
         assertThat(client.createShipment(request).trackingId()).isEqualTo("JT123");
+    }
+
+    @Test
+    void trackIgnoresProviderSpecificActivityFields() throws Exception {
+        server.createContext("/api/gateway/v1/auth/login", exchange ->
+                respond(exchange, 200, "{\"token\":\"jwt-token\"}"));
+        server.createContext("/api/gateway/v1/track/JT123", exchange ->
+                respond(exchange, 200, """
+                        {
+                          "tracking_id":"JT123",
+                          "reference_number":"ORDER-1",
+                          "status":"PENDING_PICKUP",
+                          "activities":[{
+                            "name":"PENDING_PICKUP",
+                            "notes":"JTS-API",
+                            "created_at":"2026-10-30T16:48:58+00:00",
+                            "picList":[]
+                          }]
+                        }
+                        """));
+        server.start();
+
+        JtExpressClient client = new JtExpressClient(properties, mapper, HttpClient.newHttpClient());
+        TrackingResponse response = client.track("JT123");
+
+        assertThat(response.status()).isEqualTo("PENDING_PICKUP");
+        assertThat(response.activities()).hasSize(1);
+        assertThat(response.activities().getFirst().name()).isEqualTo("PENDING_PICKUP");
     }
 
     private static void respond(HttpExchange exchange, int status, String body) throws IOException {

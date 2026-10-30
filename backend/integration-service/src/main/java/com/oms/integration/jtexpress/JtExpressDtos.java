@@ -1,16 +1,17 @@
 package com.oms.integration.jtexpress;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.List;
-import jakarta.validation.constraints.Pattern;
 
 public final class JtExpressDtos {
 
@@ -115,6 +116,7 @@ public final class JtExpressDtos {
             @JsonProperty("sorting_code") String sortingCode) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record Activity(
             String name,
             String reason,
@@ -122,6 +124,7 @@ public final class JtExpressDtos {
             @JsonProperty("created_at") String createdAt) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record TrackingResponse(
             @JsonProperty("tracking_id") String trackingId,
             @JsonProperty("reference_number") String referenceNumber,
