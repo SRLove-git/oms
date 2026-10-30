@@ -186,7 +186,7 @@ services:
       SERVER_PORT: "8082"
       ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
       OMS_MALL_CALLBACK_URL: http://buzud-server:8080
-      OMS_CALLBACK_SECRET: ${OMS_CALLBACK_SECRET:-}
+      OMS_MALL_CALLBACK_SECRET: ${OMS_MALL_CALLBACK_SECRET:-}
     command: ["java", "-jar", "/app/app.jar"]
     volumes:
       - /opt/oms/jars/order-service.jar:/app/app.jar:ro
@@ -254,7 +254,7 @@ services:
       SERVER_PORT: "8084"
       ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
       OMS_MALL_CALLBACK_URL: http://buzud-server:8080
-      OMS_CALLBACK_SECRET: ${OMS_CALLBACK_SECRET:-}
+      OMS_MALL_CALLBACK_SECRET: ${OMS_MALL_CALLBACK_SECRET:-}
     command: ["java", "-jar", "/app/app.jar"]
     volumes:
       - /opt/oms/jars/after-sales-service.jar:/app/app.jar:ro

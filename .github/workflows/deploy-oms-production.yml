@@ -96,7 +96,7 @@ jobs:
             printf 'OMS_JTEXPRESS_SERVICE_CODE=DOM123\n'
             printf 'OMS_JTEXPRESS_WEBHOOK_SECRET=%s\n' "$JT_WEBHOOK_SECRET"
             printf 'OMS_INTERNAL_SERVICE_SECRET=%s\n' "$INTERNAL_SECRET"
-            printf 'OMS_CALLBACK_SECRET=%s\n' "$CALLBACK_SECRET"
+            printf 'OMS_MALL_CALLBACK_SECRET=%s\n' "$CALLBACK_SECRET"
           } > jt.env
           chmod 600 jt.env
           "${SCP[@]}" jt.env "$DEPLOY_USER@$DEPLOY_HOST:$RELEASE_DIR/jt.env"

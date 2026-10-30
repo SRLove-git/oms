@@ -47,7 +47,7 @@ OMS_JTEXPRESS_SERVICE_CODE=DOM123
 OMS_JTEXPRESS_WEBHOOK_SECRET=replace-with-a-random-secret
 OMS_JTEXPRESS_MERCHANT_CODE=C0314
 OMS_JTEXPRESS_SERVICE_CODE=DOM123
-OMS_CALLBACK_SECRET=replace-with-a-separate-random-secret
+OMS_MALL_CALLBACK_SECRET=replace-with-a-separate-random-secret
 ```
 
 `email/password` 是 J&T API 登录凭据。若账号只开通了 VIP 后台、尚未开通 API，需让 J&T
@@ -55,7 +55,7 @@ OMS_CALLBACK_SECRET=replace-with-a-separate-random-secret
 
 启用极兔（`OMS_JTEXPRESS_ENABLED=true`）时必须同时配置非空 `OMS_JTEXPRESS_WEBHOOK_SECRET`；
 否则部署脚本会拒绝发布。`GET /status` 会返回 `webhookConfigured`，用于确认轨迹回调是否可用。
-`OMS_CALLBACK_SECRET` 用于 OMS 向商城推送发货、轨迹和售后状态，必须与商城侧
+`OMS_MALL_CALLBACK_SECRET` 用于 OMS 向商城推送发货、轨迹和售后状态，必须与商城侧
 `BUZUD_OMS_CALLBACK_SECRET` 完全一致，且不能使用示例默认值。
 
 ## 联调顺序
