@@ -11,6 +11,7 @@ import com.oms.aftersales.dto.AfterSalesDtos.ApplyItemRequest;
 import com.oms.aftersales.dto.AfterSalesDtos.ApplyRequest;
 import com.oms.aftersales.dto.AfterSalesDtos.InspectRequest;
 import com.oms.aftersales.dto.AfterSalesDtos.RefundRequest;
+import com.oms.aftersales.dto.AfterSalesDtos.RefundOutcome;
 import com.oms.aftersales.dto.AfterSalesDtos.RepairCreateRequest;
 import com.oms.aftersales.dto.AfterSalesDtos.RepairFeeRequest;
 import com.oms.aftersales.dto.AfterSalesDtos.RepairProgressRequest;
@@ -42,6 +43,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,6 +57,9 @@ public class AfterSalesService {
 
     @Value("${oms.aftersales.currency:SGD}")
     private String defaultCurrency;
+
+    @Value("${oms.internal-service-secret:change-this-internal-secret}")
+    private String internalServiceSecret;
 
     private static final Logger log = LoggerFactory.getLogger(AfterSalesService.class);
 
@@ -340,35 +346,125 @@ public class AfterSalesService {
     }
 
     @Transactional
-    public void refund(String returnNo, RefundRequest request, Long operatorId, String operatorName) {
-        ReturnOrder returnOrder = find(returnNo);
+    public RefundOutcome refund(
+            String returnNo, RefundRequest request, Long operatorId, String operatorName) {
+        ReturnOrder returnOrder = returnOrderMapper.selectByReturnNoForUpdate(returnNo);
+        if (returnOrder == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "售后单不存在");
+        }
         requireStatus(returnOrder, STATUS_REFUNDING);
-        RefundRecord record = new RefundRecord();
-        record.setRefundNo(generateNo("RF"));
-        record.setReturnId(returnOrder.getId());
-        record.setOrderId(returnOrder.getOrderId());
-        record.setPaymentNo(request.paymentNo());
-        record.setAmount(request.amount() == null ? returnOrder.getTotalAmount() : request.amount());
-        record.setCurrency(defaultCurrency);
-        record.setMethod(request.method() == null ? 1 : request.method());
-        record.setStatus(3);
-        record.setChannelTxnNo("REF-" + System.currentTimeMillis());
-        record.setRefundedAt(LocalDateTime.now());
-        refundRecordMapper.insert(record);
+        RefundRecord record = pendingRefund(returnOrder.getId());
+        if (record == null && hasCompletedRefund(returnOrder.getOrderId())) {
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "该订单已完成原路退款，不能重复退款");
+        }
+        OrderClient.SuccessfulPayment payment = requireData(
+                orderClient.successfulPayment(internalServiceSecret, returnOrder.getOrderNo()), "查询原支付记录");
+        requireYeahPayPayment(payment);
+        BigDecimal refundAmount = request.amount() == null ? payment.amount() : request.amount();
+        if (refundAmount == null || refundAmount.signum() <= 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "退款金额必须大于 0");
+        }
+        if (payment.amount() == null || refundAmount.compareTo(payment.amount()) != 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "YeahPay 当前仅开放整单全额退款");
+        }
+        if (record == null) {
+            record = new RefundRecord();
+            record.setRefundNo(generateNo("RF"));
+            record.setReturnId(returnOrder.getId());
+            record.setOrderId(returnOrder.getOrderId());
+            record.setPaymentNo(payment.paymentNo());
+            record.setAmount(refundAmount);
+            record.setCurrency(payment.currency() == null ? defaultCurrency : payment.currency());
+            record.setMethod(request.method() == null ? 1 : request.method());
+            record.setStatus(2);
+            refundRecordMapper.insert(record);
+        } else if (record.getAmount().compareTo(refundAmount) != 0) {
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "退款处理中，不能变更退款金额");
+        }
 
-        bestEffort(() -> paymentClient.refund(
-                request.paymentNo(),
-                new PaymentClient.RefundRequest(record.getAmount(), "售后退款 " + returnNo)));
+        PaymentClient.RefundOutcome providerResult;
+        try {
+            providerResult = requireData(paymentClient.refundExternal(
+                    internalServiceSecret,
+                    new PaymentClient.ExternalRefundRequest(
+                            payment.paymentNo(),
+                            returnOrder.getOrderNo(),
+                            payment.channel(),
+                            record.getAmount(),
+                            record.getCurrency(),
+                            payment.channelTxnNo(),
+                            payment.providerOrderNo(),
+                            record.getRefundNo())), "YeahPay 退款");
+        } catch (RuntimeException ex) {
+            log.warn("退款结果未确认，保留退款中状态 returnNo={}", returnNo, ex);
+            return new RefundOutcome(3, record.getRefundNo(), "渠道退款结果未确认，请稍后重试查询");
+        }
+
+        if (providerResult.status() == null || providerResult.status() == 3) {
+            return new RefundOutcome(3, record.getRefundNo(), "退款已受理，正在处理中");
+        }
+        if (providerResult.status() != 2) {
+            record.setStatus(4);
+            record.setChannelTxnNo(providerResult.providerRefundNo());
+            refundRecordMapper.updateById(record);
+            return new RefundOutcome(1, record.getRefundNo(), "退款失败，请核对渠道状态后重试");
+        }
+
+        record.setStatus(3);
+        record.setChannelTxnNo(providerResult.providerRefundNo());
+        record.setRefundedAt(LocalDateTime.now());
+        refundRecordMapper.updateById(record);
         returnOrder.setStatus(STATUS_COMPLETED);
         returnOrderMapper.updateById(returnOrder);
         completeOrderLinkage(returnOrder);
         notifyMall(returnOrder);
+        BigDecimal completedRefundAmount = record.getAmount();
         bestEffort(() -> integrationClient.send(new IntegrationClient.SendRequest(
                 "in_app",
                 "AFTER_SALES_REFUNDED",
                 "merchant:" + returnOrder.getMerchantId(),
                 "售后退款成功",
-                "售后单 " + returnNo + " 退款 " + record.getAmount() + " 元已原路退回")));
+                "售后单 " + returnNo + " 退款 " + completedRefundAmount + " 元已原路退回")));
+        return new RefundOutcome(2, record.getRefundNo(), "退款成功");
+    }
+
+    private RefundRecord pendingRefund(Long returnId) {
+        return refundRecordMapper.selectOne(new LambdaQueryWrapper<RefundRecord>()
+                .eq(RefundRecord::getReturnId, returnId)
+                .eq(RefundRecord::getStatus, 2)
+                .eq(RefundRecord::getDeleted, 0)
+                .orderByDesc(RefundRecord::getId)
+                .last("LIMIT 1"));
+    }
+
+    private boolean hasCompletedRefund(Long orderId) {
+        return refundRecordMapper.selectCount(new LambdaQueryWrapper<RefundRecord>()
+                        .eq(RefundRecord::getOrderId, orderId)
+                        .eq(RefundRecord::getStatus, 3)
+                        .eq(RefundRecord::getDeleted, 0))
+                > 0;
+    }
+
+    private static void requireYeahPayPayment(OrderClient.SuccessfulPayment payment) {
+        String channel = payment.channel();
+        if (channel == null
+                || !Set.of("yeahpay", "paynow", "wechat", "alipay")
+                        .contains(channel.toLowerCase(Locale.ROOT))) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), "原支付不是 YeahPay 交易");
+        }
+        if (payment.channelTxnNo() == null
+                || payment.channelTxnNo().isBlank()
+                || payment.providerOrderNo() == null
+                || payment.providerOrderNo().isBlank()) {
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), "原支付缺少 YeahPay 交易标识，无法退款");
+        }
+    }
+
+    private static <T> T requireData(Result<T> result, String action) {
+        if (result == null || result.code() != 0 || result.data() == null) {
+            throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE.getCode(), action + "失败");
+        }
+        return result.data();
     }
 
     @Transactional

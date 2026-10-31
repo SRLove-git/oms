@@ -287,6 +287,12 @@ services:
       SERVER_PORT: "8085"
       ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
       OMS_PAYMENT_MOCK_ONLY: "true"
+      OMS_YEAHPAY_ENABLED: ${OMS_YEAHPAY_ENABLED:-false}
+      OMS_YEAHPAY_APP_ID: ${OMS_YEAHPAY_APP_ID:-}
+      OMS_YEAHPAY_API_KEY: ${OMS_YEAHPAY_API_KEY:-}
+      OMS_YEAHPAY_MERCHANT_ID: ${OMS_YEAHPAY_MERCHANT_ID:-}
+      OMS_YEAHPAY_API_BASE_URL: ${OMS_YEAHPAY_API_BASE_URL:-https://open-api.yeahpay.sg/acceptance/acceptance-open-api}
+      OMS_YEAHPAY_SIGNATURE_DOMAIN: ${OMS_YEAHPAY_SIGNATURE_DOMAIN:-https://open-api.yeahpay.sg/acceptance}
     command: ["java", "-jar", "/app/app.jar"]
     volumes:
       - /opt/oms/jars/payment-center.jar:/app/app.jar:ro

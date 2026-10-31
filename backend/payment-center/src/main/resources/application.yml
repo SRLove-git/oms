@@ -66,6 +66,7 @@ logging:
     com.oms: ${LOG_LEVEL:INFO}
 
 oms:
+  internal-service-secret: ${OMS_INTERNAL_SERVICE_SECRET:change-this-internal-secret}
   payment:
     mock-only: ${OMS_PAYMENT_MOCK_ONLY:true}
     card:
@@ -95,3 +96,12 @@ oms:
       notify-url: ${OMS_PAYMENT_ALIPAY_NOTIFY_URL:}
       return-url: ${OMS_PAYMENT_ALIPAY_RETURN_URL:}
       gateway-url: ${OMS_PAYMENT_ALIPAY_GATEWAY_URL:https://openapi.alipay.com/gateway.do}
+    yeahpay:
+      enabled: ${OMS_YEAHPAY_ENABLED:false}
+      app-id: ${OMS_YEAHPAY_APP_ID:}
+      api-key: ${OMS_YEAHPAY_API_KEY:}
+      merchant-id: ${OMS_YEAHPAY_MERCHANT_ID:}
+      api-base-url: ${OMS_YEAHPAY_API_BASE_URL:https://open-api.yeahpay.sg/acceptance/acceptance-open-api}
+      signature-domain: ${OMS_YEAHPAY_SIGNATURE_DOMAIN:https://open-api.yeahpay.sg/acceptance}
+      connect-timeout-ms: ${OMS_YEAHPAY_CONNECT_TIMEOUT_MS:10000}
+      read-timeout-ms: ${OMS_YEAHPAY_READ_TIMEOUT_MS:20000}

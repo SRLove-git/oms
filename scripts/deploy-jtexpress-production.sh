@@ -60,12 +60,29 @@ seed_missing_env() {
   fi
 }
 
+seed_mapped_env() {
+  local file="$1"
+  local target_key="$2"
+  local container="$3"
+  local source_key="$4"
+  local value
+  if grep -q "^${target_key}=." "$file"; then
+    return
+  fi
+  value="$(container_env_value "$container" "$source_key")"
+  if [[ -n "$value" ]]; then
+    sed -i.bak "/^${target_key}=/d" "$file"
+    rm -f "$file.bak"
+    printf '%s=%s\n' "$target_key" "$value" >> "$file"
+  fi
+}
+
 case "$RELEASE_DIR" in
   "$OMS_ROOT"/releases/*) ;;
   *) echo "release directory must be under $OMS_ROOT/releases" >&2; exit 2 ;;
 esac
 
-for file in oms-gateway.jar order-service.jar integration-service.jar admin.tgz docker-compose.prod.yml; do
+for file in oms-gateway.jar order-service.jar after-sales-service.jar payment-center.jar integration-service.jar admin.tgz docker-compose.prod.yml; do
   test -s "$RELEASE_DIR/$file"
 done
 test -s "$SECRETS_FILE"
@@ -73,6 +90,8 @@ test -s "$SECRETS_FILE"
 mkdir -p "$BACKUP_DIR/jars" "$BACKUP_DIR/deploy" "$BACKUP_DIR/dist"
 cp -a "$OMS_ROOT/jars/oms-gateway.jar" "$BACKUP_DIR/jars/"
 cp -a "$OMS_ROOT/jars/order-service.jar" "$BACKUP_DIR/jars/"
+cp -a "$OMS_ROOT/jars/after-sales-service.jar" "$BACKUP_DIR/jars/"
+cp -a "$OMS_ROOT/jars/payment-center.jar" "$BACKUP_DIR/jars/"
 cp -a "$OMS_ROOT/jars/integration-service.jar" "$BACKUP_DIR/jars/"
 cp -a "$COMPOSE_FILE" "$BACKUP_DIR/deploy/"
 if [[ -f "$ENV_FILE" ]]; then
@@ -84,6 +103,16 @@ seed_missing_env "$BACKUP_DIR/env" OMS_JWT_SECRET oms-user-service
 seed_missing_env "$BACKUP_DIR/env" MYSQL_PASSWORD oms-user-service
 seed_missing_env "$BACKUP_DIR/env" MYSQL_ROOT_PASSWORD oms-mysql
 seed_missing_env "$BACKUP_DIR/env" OMS_OPEN_API_DEMO_MALL_SECRET oms-gateway
+# YeahPay 生产凭据已经由商城容器持有。只在 OMS 缺失时映射复制，
+# 不打印、不上传，也不在 GitHub Actions 中传输明文。
+seed_mapped_env "$BACKUP_DIR/env" OMS_YEAHPAY_APP_ID buzud-server IKEA_YEAHPAY_APP_ID
+seed_mapped_env "$BACKUP_DIR/env" OMS_YEAHPAY_API_KEY buzud-server IKEA_YEAHPAY_API_KEY
+seed_mapped_env "$BACKUP_DIR/env" OMS_YEAHPAY_MERCHANT_ID buzud-server IKEA_YEAHPAY_MERCHANT_ID
+seed_mapped_env "$BACKUP_DIR/env" OMS_YEAHPAY_API_BASE_URL buzud-server IKEA_YEAHPAY_API_BASE_URL
+seed_mapped_env "$BACKUP_DIR/env" OMS_YEAHPAY_SIGNATURE_DOMAIN buzud-server IKEA_YEAHPAY_SIGNATURE_DOMAIN
+sed -i.bak '/^OMS_YEAHPAY_ENABLED=/d' "$BACKUP_DIR/env"
+rm -f "$BACKUP_DIR/env.bak"
+printf 'OMS_YEAHPAY_ENABLED=true\n' >> "$BACKUP_DIR/env"
 cp -a "$OMS_ROOT/dist/admin" "$BACKUP_DIR/dist/admin"
 chmod 600 "$BACKUP_DIR/env"
 DEPLOYED=1
@@ -104,6 +133,8 @@ trap rollback ERR
 
 install -m 0644 "$RELEASE_DIR/oms-gateway.jar" "$OMS_ROOT/jars/oms-gateway.jar"
 install -m 0644 "$RELEASE_DIR/order-service.jar" "$OMS_ROOT/jars/order-service.jar"
+install -m 0644 "$RELEASE_DIR/after-sales-service.jar" "$OMS_ROOT/jars/after-sales-service.jar"
+install -m 0644 "$RELEASE_DIR/payment-center.jar" "$OMS_ROOT/jars/payment-center.jar"
 install -m 0644 "$RELEASE_DIR/integration-service.jar" "$OMS_ROOT/jars/integration-service.jar"
 install -m 0644 "$RELEASE_DIR/docker-compose.prod.yml" "$COMPOSE_FILE"
 
@@ -138,6 +169,15 @@ OMS_MALL_CALLBACK_SECRET="$(sed -n 's/^OMS_MALL_CALLBACK_SECRET=//p' "$ENV_FILE"
 if [[ -z "$OMS_MALL_CALLBACK_SECRET" || "$OMS_MALL_CALLBACK_SECRET" == "demo-mall-callback-secret-change-me" ]]; then
   echo "OMS_MALL_CALLBACK_SECRET must be set to a non-default value" >&2
   false
+fi
+
+if [[ "$(sed -n 's/^OMS_YEAHPAY_ENABLED=//p' "$ENV_FILE" | head -n 1)" == "true" ]]; then
+  for key in OMS_YEAHPAY_APP_ID OMS_YEAHPAY_API_KEY OMS_YEAHPAY_MERCHANT_ID; do
+    test -n "$(sed -n "s/^${key}=//p" "$ENV_FILE" | head -n 1)" || {
+      echo "${key} is required when OMS_YEAHPAY_ENABLED=true" >&2
+      false
+    }
+  done
 fi
 
 NEW_ADMIN="$OMS_ROOT/dist/admin.new-$STAMP"
@@ -189,6 +229,13 @@ done
 for container in oms-order-service oms-after-sales-service; do
   test "$(container_env_value "$container" OMS_MALL_CALLBACK_SECRET)" = "$EXPECTED_CALLBACK_SECRET"
 done
+
+YEAHPAY_STATUS="$(docker exec oms-payment-center wget -qO- \
+  --header="X-Internal-Secret: $EXPECTED_INTERNAL_SECRET" \
+  'http://127.0.0.1:8085/api/v1/payments/external/yeahpay-status')"
+printf '%s\n' "$YEAHPAY_STATUS"
+grep -q '"configured":true' <<< "$YEAHPAY_STATUS"
+grep -q '"connected":true' <<< "$YEAHPAY_STATUS"
 
 VERIFY_RESULT="$(docker exec oms-integration-service wget -qO- \
   --header='X-User-Type: 1' \

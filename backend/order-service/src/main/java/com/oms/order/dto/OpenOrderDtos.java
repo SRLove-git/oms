@@ -34,7 +34,17 @@ public final class OpenOrderDtos {
             BigDecimal amount,
             String channel,
             String channelTxnNo,
+            String providerOrderNo,
             LocalDateTime paidAt) {
+
+        public OpenPaymentNotifyRequest(
+                String paymentNo,
+                BigDecimal amount,
+                String channel,
+                String channelTxnNo,
+                LocalDateTime paidAt) {
+            this(paymentNo, amount, channel, channelTxnNo, null, paidAt);
+        }
     }
 
     public record OpenOrderResponse(

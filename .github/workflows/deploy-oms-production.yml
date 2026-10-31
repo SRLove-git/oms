@@ -27,7 +27,7 @@ jobs:
 
       - name: Build backend artifacts
         working-directory: backend
-        run: mvn -B -ntp -pl oms-gateway,order-service,integration-service -am package -DskipTests
+        run: mvn -B -ntp -pl oms-gateway,order-service,after-sales-service,payment-center,integration-service -am package -DskipTests
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -53,6 +53,8 @@ jobs:
           mkdir -p release
           cp backend/oms-gateway/target/oms-gateway-0.1.0-SNAPSHOT.jar release/oms-gateway.jar
           cp backend/order-service/target/order-service-0.1.0-SNAPSHOT.jar release/order-service.jar
+          cp backend/after-sales-service/target/after-sales-service-0.1.0-SNAPSHOT.jar release/after-sales-service.jar
+          cp backend/payment-center/target/payment-center-0.1.0-SNAPSHOT.jar release/payment-center.jar
           cp backend/integration-service/target/integration-service-0.1.0-SNAPSHOT.jar release/integration-service.jar
           cp deploy/docker-compose.prod.yml release/docker-compose.prod.yml
           cp scripts/deploy-jtexpress-production.sh release/deploy.sh

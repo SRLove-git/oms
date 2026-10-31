@@ -1,11 +1,17 @@
 package com.oms.order.controller;
 
+import com.oms.common.core.exception.BusinessException;
+import com.oms.common.core.result.ErrorCode;
 import com.oms.common.core.result.Result;
 import com.oms.order.dto.OrderDtos.OrderPaymentState;
+import com.oms.order.dto.OrderDtos.OrderPaymentResponse;
 import com.oms.order.dto.OrderDtos.PaymentSuccessRequest;
 import com.oms.order.dto.OrderDtos.OrderResponse;
 import com.oms.order.service.OrderService;
 import com.oms.order.service.SkuReferenceService;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,6 +26,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/orders/internal")
 public class InternalOrderController {
+
+    @Value("${oms.internal-service-secret:change-this-internal-secret}")
+    private String internalServiceSecret;
 
     private final OrderService orderService;
     private final SkuReferenceService skuReferenceService;
@@ -37,6 +46,14 @@ public class InternalOrderController {
     @GetMapping("/{orderNo}/payment-state")
     public Result<OrderPaymentState> paymentState(@PathVariable String orderNo) {
         return Result.ok(orderService.getPaymentState(orderNo));
+    }
+
+    @GetMapping("/{orderNo}/successful-payment")
+    public Result<OrderPaymentResponse> successfulPayment(
+            @RequestHeader("X-Internal-Secret") String secret,
+            @PathVariable String orderNo) {
+        requireInternalSecret(secret);
+        return Result.ok(orderService.getSuccessfulPayment(orderNo));
     }
 
     @GetMapping("/external/{externalOrderNo}")
@@ -79,6 +96,14 @@ public class InternalOrderController {
             @RequestHeader(value = "X-Username", required = false) String operatorName) {
         orderService.completeAfterSales(orderNo, operatorId, operatorName);
         return Result.ok();
+    }
+
+    private void requireInternalSecret(String secret) {
+        if (!MessageDigest.isEqual(
+                internalServiceSecret.getBytes(StandardCharsets.UTF_8),
+                secret.getBytes(StandardCharsets.UTF_8))) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
     }
 
     public record AfterSalesNotifyRequest(String returnNo, Integer type, Integer orderStatus) {

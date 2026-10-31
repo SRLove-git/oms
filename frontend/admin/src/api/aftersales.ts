@@ -95,13 +95,16 @@ export async function receiveReturnOrder(returnNo: string, qualified: boolean, r
   return res.data
 }
 
-export async function refundReturnOrder(returnNo: string, paymentNo: string, amount: string) {
-  const res = await request.post<ApiResult<void>>(`/return-orders/${returnNo}/refund`, {
-    paymentNo,
-    amount,
-    method: 1,
-  })
-  return res.data
+export async function refundReturnOrder(returnNo: string, paymentNo: string, amount?: string) {
+  const res = await request.post<ApiResult<{ status: number; refundNo: string; message: string }>>(
+    `/return-orders/${returnNo}/refund`,
+    {
+      paymentNo,
+      ...(amount ? { amount } : {}),
+      method: 1,
+    },
+  )
+  return res.data.data
 }
 
 export async function exchangeShip(returnNo: string) {

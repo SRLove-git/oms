@@ -57,6 +57,10 @@ logging:
     com.oms: ${LOG_LEVEL:INFO}
 
 oms:
+  internal-service-secret: ${OMS_INTERNAL_SERVICE_SECRET:change-this-internal-secret}
+  aftersales:
+    refund-poll-initial-delay-ms: ${OMS_REFUND_POLL_INITIAL_DELAY_MS:30000}
+    refund-poll-ms: ${OMS_REFUND_POLL_MS:60000}
   callback:
     base-url: ${OMS_MALL_CALLBACK_URL:http://localhost:8090}
     secret: ${OMS_MALL_CALLBACK_SECRET:demo-mall-callback-secret-change-me}

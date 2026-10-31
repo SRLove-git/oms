@@ -3,6 +3,7 @@ package com.oms.aftersales.controller;
 import com.oms.aftersales.dto.AfterSalesDtos.ApplyRequest;
 import com.oms.aftersales.dto.AfterSalesDtos.InspectRequest;
 import com.oms.aftersales.dto.AfterSalesDtos.RefundRequest;
+import com.oms.aftersales.dto.AfterSalesDtos.RefundOutcome;
 import com.oms.aftersales.dto.AfterSalesDtos.RepairCreateRequest;
 import com.oms.aftersales.dto.AfterSalesDtos.RepairFeeRequest;
 import com.oms.aftersales.dto.AfterSalesDtos.RepairProgressRequest;
@@ -77,13 +78,12 @@ public class AfterSalesController {
     }
 
     @PostMapping("/{returnNo}/refund")
-    public Result<Void> refund(
+    public Result<RefundOutcome> refund(
             @PathVariable String returnNo,
             @RequestBody RefundRequest request,
             @RequestHeader(value = "X-User-Id", required = false) Long operatorId,
             @RequestHeader(value = "X-Username", required = false) String operatorName) {
-        afterSalesService.refund(returnNo, request, operatorId, operatorName);
-        return Result.ok();
+        return Result.ok(afterSalesService.refund(returnNo, request, operatorId, operatorName));
     }
 
     @PostMapping("/{returnNo}/exchange-ship")

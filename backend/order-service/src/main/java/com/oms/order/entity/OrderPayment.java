@@ -18,6 +18,7 @@ public class OrderPayment {
     private String currency;
     private Integer status;
     private String channelTxnNo;
+    private String providerOrderNo;
     private LocalDateTime paidAt;
     private Integer version;
     private Integer deleted;
@@ -84,6 +85,14 @@ public class OrderPayment {
 
     public void setChannelTxnNo(String channelTxnNo) {
         this.channelTxnNo = channelTxnNo;
+    }
+
+    public String getProviderOrderNo() {
+        return providerOrderNo;
+    }
+
+    public void setProviderOrderNo(String providerOrderNo) {
+        this.providerOrderNo = providerOrderNo;
     }
 
     public LocalDateTime getPaidAt() {

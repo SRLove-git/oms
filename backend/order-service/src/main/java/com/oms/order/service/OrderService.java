@@ -20,6 +20,7 @@ import com.oms.order.dto.OrderDtos.OrderItemResponse;
 import com.oms.order.dto.OrderDtos.OrderLogResponse;
 import com.oms.order.dto.OrderDtos.LogisticsEventRequest;
 import com.oms.order.dto.OrderDtos.OrderPaymentState;
+import com.oms.order.dto.OrderDtos.OrderPaymentResponse;
 import com.oms.order.dto.OrderDtos.OrderResponse;
 import com.oms.order.dto.OrderDtos.OrderSummaryResponse;
 import com.oms.order.dto.OrderDtos.PayRequest;
@@ -305,6 +306,7 @@ public class OrderService {
         payment.setCurrency(order.getCurrency());
         payment.setStatus(2);
         payment.setChannelTxnNo(request.channelTxnNo());
+        payment.setProviderOrderNo(request.providerOrderNo());
         payment.setPaidAt(order.getPaidAt());
         try {
             orderPaymentMapper.insert(payment);
@@ -444,6 +446,37 @@ public class OrderService {
                 order.getCurrency(),
                 paidAmount,
                 order.getStatus());
+    }
+
+    /** 返回最近一笔成功支付；商城开放 API 支付也记录在 order_payment。 */
+    public OrderPaymentResponse getSuccessfulPayment(String orderNo) {
+        Order order = findOrder(orderNo);
+        if (order == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "订单不存在");
+        }
+        OrderPayment payment = orderPaymentMapper.selectOne(new LambdaQueryWrapper<OrderPayment>()
+                .eq(OrderPayment::getOrderId, order.getId())
+                .eq(OrderPayment::getStatus, 2)
+                .orderByDesc(OrderPayment::getPaidAt)
+                .orderByDesc(OrderPayment::getId)
+                .last("LIMIT 1"));
+        if (payment == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), "订单没有可退款的成功支付记录");
+        }
+        String providerOrderNo = trimToNull(payment.getProviderOrderNo());
+        if (providerOrderNo == null) {
+            providerOrderNo = trimToNull(order.getExternalOrderNo());
+        }
+        if (providerOrderNo == null) {
+            providerOrderNo = order.getOrderNo();
+        }
+        return new OrderPaymentResponse(
+                payment.getPaymentNo(),
+                payment.getChannel(),
+                payment.getAmount(),
+                payment.getCurrency(),
+                payment.getChannelTxnNo(),
+                providerOrderNo);
     }
 
     public PageResult<OrderSummaryResponse> page(Long merchantId, Integer status, int page, int size) {

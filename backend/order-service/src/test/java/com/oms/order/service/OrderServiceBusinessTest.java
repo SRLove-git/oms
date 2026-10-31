@@ -571,7 +571,10 @@ class OrderServiceBusinessTest {
         when(inventoryClient.deduct(any())).thenReturn(Result.ok());
 
         OpenOrderResponse response = orderService.notifyPaymentSuccess(
-                "M1", new OpenPaymentNotifyRequest("MP001", new BigDecimal("100.00"), "wechat", "TXN1", null), 1L);
+                "M1",
+                new OpenPaymentNotifyRequest(
+                        "MP001", new BigDecimal("100.00"), "wechat", "TXN1", "DPROVIDER1", null),
+                1L);
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
         assertThat(order.getPaidAt()).isNotNull();
@@ -580,6 +583,7 @@ class OrderServiceBusinessTest {
         verify(orderPaymentMapper).insert(paymentCaptor.capture());
         assertThat(paymentCaptor.getValue().getPaymentNo()).isEqualTo("MP001");
         assertThat(paymentCaptor.getValue().getChannel()).isEqualTo("wechat");
+        assertThat(paymentCaptor.getValue().getProviderOrderNo()).isEqualTo("DPROVIDER1");
         assertThat(paymentCaptor.getValue().getStatus()).isEqualTo(2);
         verify(orderLogMapper).insert(any(OrderLog.class));
         verify(inventoryClient).deduct(any());

@@ -33,4 +33,20 @@ public final class PaymentDtos {
 
     public record RefundRequest(BigDecimal amount, Integer method) {
     }
+
+    /** 商城已完成支付的原路退款请求；merchantRefundId 是跨重试幂等键。 */
+    public record ExternalRefundRequest(
+            String paymentNo,
+            String orderNo,
+            String channel,
+            BigDecimal amount,
+            String currency,
+            String channelTxnNo,
+            String providerOrderNo,
+            String merchantRefundId) {
+    }
+
+    /** status: 2=成功，3=退款中，1=失败。 */
+    public record RefundOutcome(Integer status, String providerRefundNo, String message) {
+    }
 }

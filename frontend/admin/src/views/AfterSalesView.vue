@@ -141,10 +141,16 @@ function doReceive(row: ReturnOrderSummary) {
 function doRefund(row: ReturnOrderSummary) {
   Modal.confirm({
     title: '确认退款',
-    content: `确定对售后单 ${row.returnNo} 发起退款 ${row.totalAmount} SGD？（需先完成收货质检）`,
+    content: `确定对售后单 ${row.returnNo} 发起整单原路退款？（需先完成收货质检，金额以原支付流水为准）`,
     onOk: async () => {
-      await refundReturnOrder(row.returnNo, '', row.totalAmount)
-      Message.success('退款成功')
+      const result = await refundReturnOrder(row.returnNo, '')
+      if (result.status === 2) {
+        Message.success('退款成功')
+      } else if (result.status === 3) {
+        Message.info(result.message || '退款已受理，正在处理中')
+      } else {
+        Message.error(result.message || '退款失败，请核对渠道状态')
+      }
       load()
     },
   })

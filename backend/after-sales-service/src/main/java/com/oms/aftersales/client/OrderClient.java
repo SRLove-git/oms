@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
 @FeignClient(name = "order-service", path = "/api/v1/orders")
@@ -18,6 +19,11 @@ public interface OrderClient {
 
     @GetMapping("/internal/external/{externalOrderNo}")
     Result<OrderDetail> getByExternalOrderNo(@PathVariable String externalOrderNo);
+
+    @GetMapping("/internal/{orderNo}/successful-payment")
+    Result<SuccessfulPayment> successfulPayment(
+            @RequestHeader("X-Internal-Secret") String internalSecret,
+            @PathVariable String orderNo);
 
     @PostMapping("/internal/{orderNo}/after-sales")
     Result<Void> notifyAfterSales(@PathVariable String orderNo, @RequestBody AfterSalesNotifyRequest request);
@@ -46,6 +52,15 @@ public interface OrderClient {
     }
 
     record OrderItem(Long id, Long skuId, String skuName, Integer quantity, BigDecimal unitPrice, BigDecimal totalPrice) {
+    }
+
+    record SuccessfulPayment(
+            String paymentNo,
+            String channel,
+            BigDecimal amount,
+            String currency,
+            String channelTxnNo,
+            String providerOrderNo) {
     }
 
     record AfterSalesNotifyRequest(String returnNo, Integer type, Integer orderStatus) {

@@ -99,6 +99,16 @@ public final class OrderDtos {
             Integer status) {
     }
 
+    /** 已支付订单最近一笔成功支付，用于售后原路退款。 */
+    public record OrderPaymentResponse(
+            String paymentNo,
+            String channel,
+            BigDecimal amount,
+            String currency,
+            String channelTxnNo,
+            String providerOrderNo) {
+    }
+
     public record ApprovalRequest(Integer approvalType, String requestPayload) {
     }
 

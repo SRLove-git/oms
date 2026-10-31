@@ -28,6 +28,9 @@ public final class AfterSalesDtos {
     public record RefundRequest(String paymentNo, BigDecimal amount, Integer method) {
     }
 
+    public record RefundOutcome(Integer status, String refundNo, String message) {
+    }
+
     public record RepairCreateRequest(Long skuId, String faultDesc, String assignedTo) {
     }
 

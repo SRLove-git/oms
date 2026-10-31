@@ -172,6 +172,7 @@ X-Sign: ...
   "amount": 199.00,
   "channel": "wechat",
   "channelTxnNo": "4200001234567890",
+  "providerOrderNo": "D1234567890ABCDEF",
   "paidAt": "2026-08-14T12:05:00"
 }
 ```
@@ -182,6 +183,7 @@ X-Sign: ...
 | `amount` | 是 | 实收金额，必须与订单应付金额一致（应付金额 = 商品总额 + 配送费，即下单响应中的 `totalAmount`），否则 409 |
 | `channel` | 否 | 商城收款渠道（wechat/alipay/balance 等），默认 `OPEN_API` |
 | `channelTxnNo` | 否 | 渠道交易号（对账用） |
+| `providerOrderNo` | 否 | 渠道侧商户订单号；YeahPay 原路退款时对应 `thirdOrderId`，直连钱包必须传 |
 | `paidAt` | 否 | 支付完成时间，默认服务器当前时间 |
 
 行为约定：
