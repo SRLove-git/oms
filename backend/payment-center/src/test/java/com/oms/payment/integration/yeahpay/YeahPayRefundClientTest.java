@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class YeahPayRefundClientTest {
@@ -109,6 +110,17 @@ class YeahPayRefundClientTest {
         assertEquals(true, result.get("connected"));
         assertNotNull(receivedSignature);
         assertEquals(0, refundCalls.get());
+    }
+
+    @Test
+    void shouldBeConstructibleBySpring() {
+        try (var context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(ObjectMapper.class);
+            context.register(YeahPayRefundClient.class);
+            context.refresh();
+
+            assertNotNull(context.getBean(YeahPayRefundClient.class));
+        }
     }
 
     private void respond(HttpExchange exchange, String responseBody) throws IOException {

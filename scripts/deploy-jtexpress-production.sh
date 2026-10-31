@@ -199,11 +199,13 @@ wait_healthy() {
     fi
     if [[ "$status" == "unhealthy" || "$status" == "exited" || "$status" == "dead" ]]; then
       echo "$container entered state $status" >&2
+      docker logs --tail 200 "$container" >&2 || true
       return 1
     fi
     sleep 5
   done
   echo "$container did not become healthy in time" >&2
+  docker logs --tail 200 "$container" >&2 || true
   return 1
 }
 

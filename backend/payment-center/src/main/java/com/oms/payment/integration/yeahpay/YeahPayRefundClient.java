@@ -53,11 +53,6 @@ public class YeahPayRefundClient {
         this.mapper = mapper;
     }
 
-    YeahPayRefundClient(ObjectMapper mapper, HttpClient httpClient) {
-        this.mapper = mapper;
-        this.httpClient = httpClient;
-    }
-
     public record RefundResult(Integer status, String providerRefundNo, String message) {
     }
 
