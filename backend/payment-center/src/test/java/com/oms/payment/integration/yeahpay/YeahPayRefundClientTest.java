@@ -48,7 +48,7 @@ class YeahPayRefundClientTest {
         server.start();
 
         String origin = "http://localhost:" + server.getAddress().getPort();
-        client = new YeahPayRefundClient(mapper);
+        client = new YeahPayRefundClient();
         ReflectionTestUtils.setField(client, "enabled", true);
         ReflectionTestUtils.setField(client, "appId", "app-test");
         ReflectionTestUtils.setField(client, "apiKey", "test-api-key");
@@ -115,7 +115,6 @@ class YeahPayRefundClientTest {
     @Test
     void shouldBeConstructibleBySpring() {
         try (var context = new AnnotationConfigApplicationContext()) {
-            context.registerBean(ObjectMapper.class);
             context.register(YeahPayRefundClient.class);
             context.refresh();
 

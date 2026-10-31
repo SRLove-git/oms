@@ -22,7 +22,7 @@ public class YeahPayRefundClient {
     private static final String REFUND_PATH = "/unified/reversalOperation";
     private static final String VERIFY_PATH = "/cardOrder/getTradeType";
 
-    private final ObjectMapper mapper;
+    private final ObjectMapper mapper = new ObjectMapper();
     private volatile HttpClient httpClient;
 
     @Value("${oms.payment.yeahpay.enabled:false}")
@@ -48,10 +48,6 @@ public class YeahPayRefundClient {
 
     @Value("${oms.payment.yeahpay.read-timeout-ms:20000}")
     private int readTimeoutMs;
-
-    public YeahPayRefundClient(ObjectMapper mapper) {
-        this.mapper = mapper;
-    }
 
     public record RefundResult(Integer status, String providerRefundNo, String message) {
     }
