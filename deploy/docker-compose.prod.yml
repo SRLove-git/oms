@@ -184,6 +184,7 @@ services:
     environment:
       <<: *backend-env
       SERVER_PORT: "8082"
+      OMS_INVENTORY_URL: http://inventory-service:8083
       ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
       OMS_MALL_CALLBACK_URL: http://buzud-server:8080
       OMS_MALL_CALLBACK_SECRET: ${OMS_MALL_CALLBACK_SECRET:-}
